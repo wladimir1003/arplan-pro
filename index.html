@@ -96,6 +96,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
 #draw-canvas{position:absolute;inset:0;z-index:10;touch-action:none;display:block;}
 /* ===== HUD ===== */
 #hud{position:absolute;inset:0;pointer-events:none;z-index:20;}
+#hud-br{pointer-events:all;}
+#hud-tr{pointer-events:all;}
+#hud-tl{pointer-events:all;}
 #hud-tl{position:absolute;top:8px;left:8px;display:flex;gap:5px;flex-wrap:wrap;pointer-events:all;}
 #hud-tr{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px;pointer-events:all;}
 #hud-bl{position:absolute;bottom:8px;left:8px;pointer-events:none;}
@@ -287,6 +290,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
       <div class="dd-item" onclick="doScreenshot()"><i class="ti ti-screenshot"></i>Pantallazo</div>
       <div class="dd-item" onclick="doCameraPhoto()"><i class="ti ti-camera"></i>Foto cámara</div>
       <div class="dd-item" onclick="toggleScreenRecord()"><i class="ti ti-video"></i>Grabar pantalla</div>
+      <div class="dd-item" onclick="toggleCameraPassthrough()"><i class="ti ti-camera"></i>Cámara + Plano (superponer modelo)</div>
       <div class="dd-sep"></div>
       <div class="dd-item" onclick="addObservation()"><i class="ti ti-notes"></i>Nueva observación</div>
       <div class="dd-item" onclick="exportObsPDF()"><i class="ti ti-file-type-pdf"></i>Informe campo PDF</div>
@@ -356,6 +360,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     <button class="tb-btn" id="tb-gps" onclick="toggleGPS()" title="GPS"><i class="ti ti-current-location"></i></button>
     <button class="tb-btn ar-hi" onclick="startARSurface()" title="AR Superficie"><i class="ti ti-augmented-reality"></i></button>
     <button class="tb-btn" style="color:#fcd34d" onclick="startARGPS()" title="AR GPS"><i class="ti ti-map-pin-bolt"></i></button>
+    <button class="tb-btn" id="tb-cam" onclick="toggleCameraPassthrough()" title="Cámara + Plano" style="color:#93c5fd"><i class="ti ti-camera"></i></button>
   </div>
 </div>
 
@@ -1443,15 +1448,16 @@ window.loadDemo=function(){
   const mL=new THREE.LineBasicMaterial({color:0x3b82f6});
   const mW=new THREE.MeshStandardMaterial({color:0x1e3a5f,transparent:true,opacity:0.55,side:THREE.DoubleSide});
   walls.forEach(([a,b])=>{
-    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(a[0],0,a[1]),new THREE.Vector3(b[0],0,b[1])]),mL));
+    const dln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a[0],0,a[1]),new THREE.Vector3(b[0],0,b[1])]),mL);
+    dln.userData.layer='MUROS'; g.add(dln);
     const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.sqrt(dx*dx+dz*dz);
     if(len<0.01)return;
     const geo=new THREE.BoxGeometry(len,2.8,0.15);
     const mesh=new THREE.Mesh(geo,mW); mesh.castShadow=true;
     mesh.position.set((a[0]+b[0])/2,1.4,(a[1]+b[1])/2);
     mesh.rotation.y=-Math.atan2(dz,dx);
-    g.add(mesh);
+    mesh.userData.layer='MUROS'; g.add(mesh);
   });
   S.modelObj=g; scene.add(g);
   S.fileName='demo_planta.dxf';
@@ -1933,12 +1939,21 @@ window.exportObsPDF=function(){
 #three-canvas{z-index:1;}
 /* Draw canvas always on top */
 #draw-canvas{z-index:2;}
-#cam-btn{position:absolute;bottom:52px;right:8px;z-index:25;
-  background:rgba(0,0,0,.65);border:.5px solid rgba(255,255,255,.2);
-  border-radius:8px;color:#b0c8ff;font-size:13px;padding:7px 12px;
-  cursor:pointer;pointer-events:all;display:flex;align-items:center;gap:6px;
-  white-space:nowrap;font-family:inherit;}
-#cam-btn.active{background:rgba(16,185,129,.3);border-color:#22c55e;color:#6ee7b7;}
+#cam-btn{
+  position:absolute; bottom:52px; right:8px; z-index:30;
+  background:rgba(30,41,59,.9); border:1.5px solid rgba(96,165,250,.6);
+  border-radius:20px; color:#93c5fd; font-size:13px; padding:8px 14px;
+  cursor:pointer; pointer-events:all; display:flex; align-items:center; gap:6px;
+  white-space:nowrap; font-family:inherit;
+  box-shadow:0 2px 8px rgba(0,0,0,.4);
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+#cam-btn:active{opacity:.75;}
+#cam-btn.active{
+  background:rgba(16,185,129,.3); border-color:#22c55e; color:#6ee7b7;
+  box-shadow:0 0 0 2px rgba(34,197,94,.3);
+}
 
 /* Android performance optimizations */
 * { -webkit-overflow-scrolling: touch; }
@@ -1971,35 +1986,49 @@ window.exportKML=function(){
 /* ── LAYERS ───────────────────────────────────────────────── */
 function updateLayerPanel(layers){
   S.layers=layers;
-  document.getElementById('layers-list').innerHTML=layers.map(l=>`
-    <div class="layer-item">
-      <div class="layer-dot" style="background:${l.color}"></div>
-      <span class="layer-name">${l.name}</span>
-      <button class="layer-eye" onclick="toggleLayer('${l.name}')" aria-label="${l.name}">
-        <i class="ti ${l.visible?'ti-eye':'ti-eye-off'}"></i></button>
-    </div>`).join('');
+  const el=document.getElementById('layers-list');
+  if(!el) return;
+  el.innerHTML='';
+  layers.forEach((l,idx)=>{
+    const row=document.createElement('div');
+    row.className='layer-item';
+    row.innerHTML=`
+      <div class="layer-dot" style="background:${l.color};opacity:${l.visible?1:0.35}"></div>
+      <span class="layer-name" style="opacity:${l.visible?1:0.45}">${l.name}</span>
+      <button class="layer-eye" data-layer-idx="${idx}" aria-label="${l.name}">
+        <i class="ti ${l.visible?'ti-eye':'ti-eye-off'}"></i></button>`;
+    // Use data attribute + event listener instead of onclick string (avoids escaping issues)
+    row.querySelector('.layer-eye').addEventListener('click',function(e){
+      e.stopPropagation();
+      window.toggleLayer(l.name);
+    });
+    // Also clicking the row name toggles layer
+    row.addEventListener('click',function(){
+      window.toggleLayer(l.name);
+    });
+    el.appendChild(row);
+  });
 }
 window.toggleLayer=function(name){
   const l=S.layers.find(x=>x.name===name);
   if(!l) return;
   l.visible=!l.visible;
-  // Apply visibility to Three.js objects that belong to this layer
   if(S.modelObj){
     S.modelObj.traverse(obj=>{
-      // Three.js Lines store layer name in userData if we set it,
-      // otherwise match by material color
-      if(obj.isLine || obj.isMesh){
-        const mat=obj.material;
-        if(!mat) return;
-        // We store layer on the object's userData when building
-        if(obj.userData.layer===name){
-          obj.visible=l.visible;
-        }
+      // Match by userData.layer (set when building from DXF)
+      if(obj.userData && obj.userData.layer===name){
+        obj.visible=l.visible;
+        return;
+      }
+      // Fallback: if object has no userData.layer but model has only 1 layer,
+      // toggle all geometry objects together
+      if(S.layers.length===1 && (obj.isLine||obj.isMesh||obj.isPoints)){
+        obj.visible=l.visible;
       }
     });
   }
   updateLayerPanel(S.layers);
-  showToast((l.visible?'Capa visible: ':'Capa oculta: ')+name);
+  showToast((l.visible?'✓ Capa visible: ':'○ Capa oculta: ')+name);
 };
 
 /* ── SAVE ─────────────────────────────────────────────────── */
@@ -2577,7 +2606,9 @@ window.loadTestDXF = function() {
       const p1 = new THREE.Vector3(s.x1, s.z1||0, s.y1);
       const p2 = new THREE.Vector3(s.x2, s.z2||0, s.y2);
       if (p1.distanceTo(p2) < 1e-10) return;
-      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1,p2]), mat(s.layer)));
+      const tln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1,p2]), mat(s.layer));
+      tln.userData.layer = s.layer;
+      group.add(tln);
     });
     const box = new THREE.Box3().setFromObject(group);
     const sz  = box.getSize(new THREE.Vector3());
