@@ -423,7 +423,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     <button class="dz-btn" onclick="triggerFileOpen()"><i class="ti ti-folder-open"></i> Seleccionar archivo</button>
     <button class="dz-ghost" onclick="loadDemo()">Modelo demo</button>
   </div>
-  <input type="file" id="file-input" accept=".glb,.gltf,.dxf">
+  <input type="file" id="file-input" accept=".glb,.gltf,.dxf" onchange="handleFileSelect(this.files[0])">
 </div>
 
 <!-- ===== RIGHT PANEL ===== -->
@@ -647,7 +647,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     document.addEventListener('click',function(){window.closeAllMenus();});
     // File input handler
     var fi=document.getElementById('file-input');
-    if(fi) fi.addEventListener('change',function(){if(fi.files[0])window.handleFileSelect(fi.files[0]);});
+    if(fi && !fi._listenerAdded) { fi._listenerAdded=true; fi.addEventListener('change',function(){if(fi.files[0])window.handleFileSelect(fi.files[0]);fi.value='';});
+    }
     // Drag & drop
     var dz=document.getElementById('drop-zone');
     if(dz){
@@ -1090,7 +1091,7 @@ function normObj(obj, targetSize){
 
 function loadDXF(file){
   const reader=new FileReader(); setProgress(20);
-  reader.onload=e=>{
+  reader.onload=async e=>{
     try{
       const text=e.target.result; setProgress(40);
       
