@@ -251,7 +251,7 @@ function tryReadEntity(pairs, i) {
   if (pairs[i][0] !== 0) return null;
   const type = pairs[i][1];
   const supported = ['LINE','LWPOLYLINE','POLYLINE','SPLINE',
-                     'CIRCLE','ARC','TEXT','MTEXT','INSERT','POINT'];
+                     'CIRCLE','ARC','TEXT','MTEXT','INSERT','POINT','3DFACE'];
   if (!supported.includes(type)) return null;
 
   i++;
@@ -300,6 +300,13 @@ function tryReadEntity(pairs, i) {
     if (code === 2 && (type === 'INSERT')) props.blockName = value;
     if (code === 40 && type === 'TEXT')  props.height = parseFloat(value);
     if (code === 40 && type === 'MTEXT') props.height = parseFloat(value);
+    /* 3DFACE vertices: codes 10-13=X, 20-23=Y, 30-33=Z */
+    if (type === '3DFACE') {
+      if (!props.faceVerts) props.faceVerts = [{x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:0},{x:0,y:0,z:0}];
+      const vi = (code >= 10 && code <= 13) ? code-10 : (code >= 20 && code <= 23) ? code-20 : (code >= 30 && code <= 33) ? code-30 : -1;
+      const ax = code >= 10 && code <= 13 ? 'x' : code >= 20 && code <= 23 ? 'y' : code >= 30 && code <= 33 ? 'z' : null;
+      if (vi >= 0 && ax) props.faceVerts[vi][ax] = parseFloat(value);
+    }
 
     i++;
   }
@@ -399,6 +406,10 @@ function appendEntity(result, e) {
     result.points.push({ x:e.x1, y:e.y1, layer });
     return;
   }
+  if (e.type === '3DFACE') {
+    appendFace(result, e);
+    return;
+  }
 }
 
 /* ── Expandir bloque INSERT ───────────────────────────────── */
@@ -480,4 +491,17 @@ function bulgeToSegments(p1, p2, bulge) {
     prevX = nx; prevY = ny;
   }
   return segs;
+}
+
+/* ── 3DFACE support (added) ───────────────────────────────── */
+function appendFace(result, e) {
+  const layer = e.layer || '0';
+  const vs = e.faceVerts;
+  if (!vs || vs.length < 3) return;
+  const edges = [[0,1],[1,2],[2,3],[3,0]];
+  edges.forEach(([a,b]) => {
+    const va = vs[a] || vs[0], vb = vs[b] || vs[0];
+    if (Math.hypot(vb.x-va.x, vb.y-va.y, vb.z-va.z) > 1e-10)
+      result.segments.push({x1:va.x,y1:va.y,z1:va.z,x2:vb.x,y2:vb.y,z2:vb.z,layer});
+  });
 }
