@@ -1,0 +1,2227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ARPlan Pro</title>
+<link rel="manifest" href="manifest.json">
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;}
+html,body{width:100%;height:100%;overflow:hidden;background:#111827;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;
+  -webkit-text-size-adjust:100%;touch-action:manipulation;}
+:root{
+  --bg-app:#111827;--bg-panel:#1f2937;--bg-hover:#374151;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);
+  --text-pri:#f9fafb;--text-sec:#9ca3af;--text-tert:#6b7280;
+  --accent:#3b82f6;--accent-bg:rgba(59,130,246,0.18);
+  --success:#22c55e;--warning:#f59e0b;--danger:#ef4444;--info:#60a5fa;
+  --r:6px;--rs:4px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+/* ===== LAYOUT ===== */
+#app{display:grid;
+  grid-template-rows:26px 40px 1fr 22px;
+  grid-template-columns:44px 1fr 210px;
+  grid-template-areas:"mb mb mb""tb tb tb""lp vp rp""sb sb sb";
+  width:100dvw;height:100dvh;
+  padding-top:var(--safe-top);padding-bottom:var(--safe-bot);}
+/* Tablet portrait */
+@media(max-width:900px){
+  #app{grid-template-columns:44px 1fr;}
+  #right-panel{display:none;}
+  #panel-fab{display:flex!important;}
+}
+/* Mobile */
+@media(max-width:540px){
+  #app{grid-template-rows:0 44px 1fr 0;grid-template-columns:40px 1fr;}
+  #menubar,#statusbar{display:none;}
+  .tb-group-label{display:none;}
+  .tb-btn{width:36px;height:36px;}
+}
+/* ===== MENUBAR ===== */
+#menubar{grid-area:mb;background:var(--bg-panel);border-bottom:.5px solid var(--border);
+  display:flex;align-items:center;padding:0 6px;gap:1px;user-select:none;}
+.menu-trigger{padding:2px 8px;border-radius:var(--rs);color:var(--text-sec);cursor:pointer;font-size:12px;white-space:nowrap;}
+.menu-trigger:hover,.menu-trigger.open{background:var(--bg-hover);color:var(--text-pri);}
+.app-title{margin-left:auto;font-size:11px;color:var(--text-tert);padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;}
+.dropdown{display:none;position:absolute;top:100%;left:0;min-width:230px;
+  background:#1e293b;border:.5px solid var(--border2);border-radius:var(--r);
+  box-shadow:0 8px 28px rgba(0,0,0,.6);z-index:3000;padding:4px 0;}
+.dropdown.open{display:block;}
+.menu-parent{position:relative;}
+.dd-item{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;color:var(--text-pri);white-space:nowrap;font-size:12px;min-height:34px;}
+.dd-item:hover,.dd-item:active{background:var(--accent-bg);color:var(--info);}
+.dd-item i{font-size:14px;color:var(--text-tert);width:16px;flex-shrink:0;}
+.dd-shortcut{margin-left:auto;font-size:10px;color:var(--text-tert);padding-left:14px;}
+.dd-sep{height:.5px;background:var(--border);margin:3px 10px;}
+/* ===== TOOLBAR ===== */
+#toolbar{grid-area:tb;background:var(--bg-panel);border-bottom:.5px solid var(--border);
+  display:flex;align-items:center;padding:0 4px;overflow-x:auto;scrollbar-width:none;gap:0;}
+#toolbar::-webkit-scrollbar{display:none;}
+.tb-group{display:flex;align-items:center;gap:1px;padding:0 3px;border-right:.5px solid var(--border);}
+.tb-group:last-child{border-right:none;}
+.tb-group-label{font-size:9px;color:var(--text-tert);padding:0 3px;white-space:nowrap;}
+.tb-btn{width:30px;height:30px;border:none;background:transparent;color:var(--text-sec);
+  cursor:pointer;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;
+  font-size:16px;transition:background .1s,color .1s;flex-shrink:0;
+  -webkit-user-select:none;user-select:none;}
+.tb-btn:hover,.tb-btn:active{background:var(--bg-hover);color:var(--text-pri);}
+.tb-btn.active{background:var(--accent-bg);color:var(--accent);}
+.tb-btn.ar-hi{color:#6ee7b7;}
+/* ===== LEFT PALETTE ===== */
+#left-palette{grid-area:lp;background:var(--bg-panel);border-right:.5px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;padding:4px 0;gap:2px;
+  overflow-y:auto;scrollbar-width:none;}
+#left-palette::-webkit-scrollbar{display:none;}
+.tool-btn{width:34px;height:34px;border:none;background:transparent;color:var(--text-sec);
+  cursor:pointer;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;
+  font-size:17px;transition:background .1s,color .1s;
+  -webkit-user-select:none;user-select:none;}
+.tool-btn:hover,.tool-btn:active{background:var(--bg-hover);color:var(--text-pri);}
+.tool-btn.active{background:var(--accent-bg);color:var(--accent);}
+.tool-sep{width:28px;height:.5px;background:var(--border);margin:2px 0;flex-shrink:0;}
+/* ===== VIEWPORT ===== */
+#viewport{grid-area:vp;position:relative;overflow:hidden;background:#0d1117;
+  /* CRITICAL: allow Three.js canvas to receive touch for orbit/pan */
+  touch-action:none;}
+#three-canvas{position:absolute;inset:0;width:100%!important;height:100%!important;display:block;}
+/* draw-canvas sits above three — touch-action:none lets Pointer API work */
+#draw-canvas{position:absolute;inset:0;z-index:10;touch-action:none;display:block;}
+/* ===== HUD ===== */
+#hud{position:absolute;inset:0;pointer-events:none;z-index:20;}
+#hud-tl{position:absolute;top:8px;left:8px;display:flex;gap:5px;flex-wrap:wrap;pointer-events:all;}
+#hud-tr{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px;pointer-events:all;}
+#hud-bl{position:absolute;bottom:8px;left:8px;pointer-events:none;}
+#hud-br{position:absolute;bottom:8px;right:8px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:all;}
+#hud-bc{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);pointer-events:none;display:none;}
+.hud-pill{background:rgba(0,0,0,.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border:.5px solid rgba(255,255,255,.13);border-radius:20px;
+  padding:4px 10px;font-size:11px;color:#b0c8ff;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.hud-pill i{font-size:12px;opacity:.7;}
+.gps-dot{width:7px;height:7px;border-radius:50%;background:var(--text-tert);display:inline-block;flex-shrink:0;}
+.gps-dot.active{background:var(--success);}
+@keyframes gps-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.gps-dot.active{animation:gps-pulse 1.8s infinite;}
+.mono{font-family:monospace;font-size:10px;}
+.mode-btn-hud{padding:6px 12px;border-radius:var(--rs);font-size:11px;
+  border:.5px solid rgba(255,255,255,.2);cursor:pointer;white-space:nowrap;font-family:inherit;}
+.mode-btn-hud.m3d{background:rgba(59,130,246,.25);color:#93c5fd;}
+.mode-btn-hud.mar{background:rgba(16,185,129,.25);color:#6ee7b7;}
+.mode-btn-hud.mgps{background:rgba(245,158,11,.28);color:#fcd34d;}
+.mode-btn-hud.active{border-width:1.5px;}
+.zoom-cluster{display:flex;align-items:center;gap:3px;}
+.zoom-btn{width:30px;height:30px;background:rgba(0,0,0,.65);border:.5px solid rgba(255,255,255,.15);
+  border-radius:var(--rs);color:#b0c8ff;font-size:18px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;pointer-events:all;user-select:none;}
+.zoom-val{background:rgba(0,0,0,.65);border:.5px solid rgba(255,255,255,.15);
+  border-radius:var(--rs);padding:3px 8px;font-size:10px;color:#7ab4ff;min-width:48px;
+  text-align:center;font-family:monospace;}
+/* AR reticle */
+#ar-reticle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;display:none;}
+#ar-place-btn{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
+  background:rgba(16,185,129,.92);color:#fff;border:none;padding:13px 30px;
+  border-radius:24px;font-size:15px;font-family:inherit;cursor:pointer;pointer-events:all;display:none;z-index:30;}
+#progress-bar{position:absolute;bottom:0;left:0;width:0%;height:3px;background:var(--accent);z-index:50;transition:width .2s;}
+/* Drop zone */
+#drop-zone{position:absolute;inset:0;z-index:40;background:rgba(10,15,25,.93);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:pointer;}
+#drop-zone.drag-over{background:rgba(59,130,246,.18);}
+#drop-zone h2{font-size:18px;color:var(--text-pri);font-weight:500;}
+#drop-zone p{font-size:13px;color:var(--text-sec);}
+.dz-icon{font-size:54px;color:var(--accent);opacity:.7;}
+.dz-btn{padding:11px 24px;background:var(--accent);color:#fff;border:none;border-radius:22px;
+  font-size:14px;font-family:inherit;cursor:pointer;margin-top:4px;}
+.dz-ghost{padding:9px 18px;background:transparent;color:var(--text-sec);border:.5px solid var(--border2);
+  border-radius:22px;font-size:13px;font-family:inherit;cursor:pointer;}
+#file-input{display:none;}
+/* ===== RIGHT PANEL ===== */
+#right-panel{grid-area:rp;background:var(--bg-panel);border-left:.5px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;}
+/* Floating panel FAB (tablet) */
+#panel-fab{display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);z-index:100;
+  width:32px;height:56px;background:var(--bg-panel);border:.5px solid var(--border2);
+  border-radius:var(--r) 0 0 var(--r);align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text-sec);font-size:16px;}
+/* Drawer overlay */
+#drawer-overlay{display:none;position:absolute;inset:0;z-index:98;background:rgba(0,0,0,.4);}
+#right-panel.drawer{position:absolute;right:0;top:0;bottom:0;z-index:99;width:230px;
+  border-left:.5px solid var(--border2);box-shadow:-4px 0 16px rgba(0,0,0,.4);}
+.rp-section{border-bottom:.5px solid var(--border);}
+.rp-header{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;cursor:pointer;user-select:none;}
+.rp-header:hover,.rp-header:active{background:var(--bg-hover);}
+.rp-title{font-size:10px;font-weight:600;color:var(--text-tert);letter-spacing:.07em;text-transform:uppercase;}
+.rp-body{padding:8px 10px;display:flex;flex-direction:column;gap:5px;}
+.rp-row{display:flex;align-items:center;gap:6px;}
+.rp-label{font-size:11px;color:var(--text-sec);flex:1;white-space:nowrap;}
+.rp-val{font-size:11px;color:var(--text-pri);font-family:monospace;}
+.rp-inp{width:80px;height:24px;font-size:11px;border:.5px solid var(--border2);border-radius:var(--rs);
+  padding:0 5px;background:#0f172a;color:var(--text-pri);font-family:monospace;}
+.rp-inp:focus{outline:1.5px solid var(--accent);}
+.rp-sub{font-size:10px;color:var(--text-tert);margin-top:4px;margin-bottom:2px;}
+.layer-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:var(--rs);cursor:pointer;min-height:30px;}
+.layer-item:hover,.layer-item:active{background:var(--bg-hover);}
+.layer-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.layer-name{font-size:11px;color:var(--text-sec);flex:1;}
+.layer-eye{background:transparent;border:none;color:var(--text-tert);cursor:pointer;font-size:15px;padding:2px;min-width:24px;}
+.color-palette{display:flex;gap:4px;flex-wrap:wrap;}
+.color-sw{width:20px;height:20px;border-radius:3px;cursor:pointer;border:.5px solid rgba(255,255,255,.15);transition:transform .1s;}
+.color-sw:hover,.color-sw:active{transform:scale(1.25);}
+.color-sw.active{outline:2px solid #fff;outline-offset:1px;}
+.stroke-sizes{display:flex;gap:3px;}
+.stroke-opt{padding:3px 8px;border-radius:var(--rs);font-size:10px;border:.5px solid var(--border2);
+  cursor:pointer;color:var(--text-sec);background:transparent;min-height:26px;}
+.stroke-opt.active{background:var(--accent-bg);color:var(--accent);border-color:transparent;}
+.obs-item{padding:6px 8px;border-radius:var(--rs);background:#0f172a;border-left:2px solid var(--warning);margin-bottom:4px;}
+.obs-badge{display:inline-block;background:rgba(245,158,11,.15);color:var(--warning);border-radius:3px;padding:1px 5px;font-size:9px;margin-bottom:2px;}
+.obs-text{font-size:10px;color:var(--text-sec);}
+.obs-time{font-size:9px;color:var(--text-tert);margin-top:2px;}
+.gps-card{background:#0f172a;border-radius:var(--rs);padding:8px 10px;}
+.gps-row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px;}
+.gps-row span:first-child{color:var(--text-tert);}
+.gps-val{color:var(--text-pri);font-family:monospace;}
+.gps-good{color:var(--success)!important;}
+.gps-bad{color:var(--danger)!important;}
+/* GPS status banner */
+#gps-banner{display:none;position:absolute;top:44px;left:50%;transform:translateX(-50%);
+  z-index:50;background:rgba(245,158,11,.9);color:#fff;padding:8px 18px;border-radius:20px;
+  font-size:12px;text-align:center;max-width:90%;pointer-events:none;}
+/* ===== STATUS BAR ===== */
+#statusbar{grid-area:sb;background:var(--bg-panel);border-top:.5px solid var(--border);
+  display:flex;align-items:center;padding:0 8px;gap:14px;overflow-x:auto;scrollbar-width:none;}
+#statusbar::-webkit-scrollbar{display:none;}
+.sb-item{font-size:10px;color:var(--text-tert);display:flex;align-items:center;gap:3px;white-space:nowrap;}
+.sb-item i{font-size:11px;}
+.sb-item.ok{color:var(--success);} .sb-item.warn{color:var(--warning);}
+.sb-sp{flex:1;}
+/* ===== TOAST ===== */
+#toast-ct{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);
+  z-index:9999;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;}
+.toast{background:rgba(15,23,42,.96);color:var(--text-pri);padding:9px 18px;border-radius:20px;
+  font-size:12px;border:.5px solid var(--border2);pointer-events:none;max-width:90vw;text-align:center;}
+.toast.ok{border-color:var(--success);color:var(--success);}
+.toast.err{border-color:var(--danger);color:var(--danger);}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tout{from{opacity:1}to{opacity:0}}
+/* ===== MODAL ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:4000;
+  display:flex;align-items:center;justify-content:center;}
+.modal{background:#1e293b;border:.5px solid var(--border2);border-radius:var(--r);
+  padding:20px;min-width:290px;max-width:440px;width:92%;}
+.modal h3{font-size:15px;font-weight:500;color:var(--text-pri);margin-bottom:12px;}
+.modal label{font-size:12px;color:var(--text-sec);display:block;margin-bottom:3px;margin-top:8px;}
+.modal input,.modal select{width:100%;height:32px;background:#0f172a;border:.5px solid var(--border2);
+  border-radius:var(--rs);color:var(--text-pri);font-size:12px;padding:0 8px;font-family:monospace;}
+.modal input:focus,.modal select:focus{outline:1.5px solid var(--accent);}
+.modal-btns{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
+.btn-pri{padding:8px 18px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-size:13px;font-family:inherit;cursor:pointer;}
+.btn-sec{padding:8px 18px;background:transparent;color:var(--text-sec);border:.5px solid var(--border2);border-radius:var(--rs);font-size:13px;font-family:inherit;cursor:pointer;}
+.btn-sec:hover{background:var(--bg-hover);}
+/* Floating text input for text tool */
+.floating-text{position:absolute;z-index:25;background:rgba(254,243,199,.94);
+  border:2px solid var(--warning);border-radius:4px;font-size:13px;padding:6px;
+  min-width:140px;min-height:50px;resize:both;color:#1e1005;font-family:sans-serif;}
+/* Touch target enforcer */
+@media(pointer:coarse){
+  .tool-btn,.tb-btn,.zoom-btn,.dz-btn,.dz-ghost,.btn-pri,.btn-sec{min-height:44px;min-width:44px;}
+  .tool-btn,.tb-btn{width:40px;height:40px;}
+  .layer-eye{min-width:36px;min-height:36px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ===== MENUBAR ===== -->
+<div id="menubar">
+  <div class="menu-parent"><div class="menu-trigger" data-menu="m-arch">Archivo</div>
+    <div class="dropdown" id="m-arch">
+      <div class="dd-item" onclick="triggerFileOpen()"><i class="ti ti-folder-open"></i>Abrir…<span class="dd-shortcut">Ctrl+O</span></div>
+      <div class="dd-item" onclick="saveProject()"><i class="ti ti-device-floppy"></i>Guardar<span class="dd-shortcut">Ctrl+S</span></div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="triggerFileOpen('dxf')"><i class="ti ti-upload"></i>Importar DXF…</div>
+      <div class="dd-item" onclick="triggerFileOpen('glb')"><i class="ti ti-box-3d"></i>Importar GLB/GLTF…</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="doScreenshot()"><i class="ti ti-image"></i>Exportar PNG…</div>
+      <div class="dd-item" onclick="exportObsPDF()"><i class="ti ti-file-type-pdf"></i>Informe PDF…</div>
+    </div>
+  </div>
+  <div class="menu-parent"><div class="menu-trigger" data-menu="m-ver">Ver</div>
+    <div class="dropdown" id="m-ver">
+      <div class="dd-item" onclick="zoomExtents()"><i class="ti ti-arrows-maximize"></i>Zoom Extents</div>
+      <div class="dd-item" onclick="zoomIn()"><i class="ti ti-zoom-in"></i>Zoom In</div>
+      <div class="dd-item" onclick="zoomOut()"><i class="ti ti-zoom-out"></i>Zoom Out</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="setView('top')"><i class="ti ti-layout-2"></i>Vista Planta</div>
+      <div class="dd-item" onclick="setView('iso')"><i class="ti ti-cube"></i>Vista 3D</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="toggleGrid()"><i class="ti ti-grid-dots"></i>Grid</div>
+      <div class="dd-item" onclick="toggleRightPanel()"><i class="ti ti-layout-sidebar-right"></i>Panel lateral</div>
+    </div>
+  </div>
+  <div class="menu-parent"><div class="menu-trigger" data-menu="m-dib">Dibujo</div>
+    <div class="dropdown" id="m-dib">
+      <div class="dd-item" onclick="setTool('pencil')"><i class="ti ti-pencil"></i>Lápiz<span class="dd-shortcut">P</span></div>
+      <div class="dd-item" onclick="setTool('highlight')"><i class="ti ti-highlight"></i>Resaltador<span class="dd-shortcut">H</span></div>
+      <div class="dd-item" onclick="setTool('line')"><i class="ti ti-line"></i>Línea<span class="dd-shortcut">L</span></div>
+      <div class="dd-item" onclick="setTool('rect')"><i class="ti ti-rectangle"></i>Rectángulo<span class="dd-shortcut">R</span></div>
+      <div class="dd-item" onclick="setTool('circle')"><i class="ti ti-circle"></i>Círculo<span class="dd-shortcut">C</span></div>
+      <div class="dd-item" onclick="setTool('cloud')"><i class="ti ti-cloud"></i>Nube revisión</div>
+      <div class="dd-item" onclick="setTool('text')"><i class="ti ti-text-caption"></i>Texto<span class="dd-shortcut">T</span></div>
+      <div class="dd-item" onclick="setTool('arrow')"><i class="ti ti-arrow-big-right"></i>Flecha</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="setTool('measure')"><i class="ti ti-ruler"></i>Medir<span class="dd-shortcut">M</span></div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="undoStroke()"><i class="ti ti-arrow-back-up"></i>Deshacer<span class="dd-shortcut">Ctrl+Z</span></div>
+      <div class="dd-item" onclick="clearDrawing()"><i class="ti ti-eraser"></i>Borrar todo</div>
+    </div>
+  </div>
+  <div class="menu-parent"><div class="menu-trigger" data-menu="m-herr">Herramientas</div>
+    <div class="dropdown" id="m-herr">
+      <div class="dd-item" onclick="doScreenshot()"><i class="ti ti-screenshot"></i>Pantallazo</div>
+      <div class="dd-item" onclick="doCameraPhoto()"><i class="ti ti-camera"></i>Foto cámara</div>
+      <div class="dd-item" onclick="toggleScreenRecord()"><i class="ti ti-video"></i>Grabar pantalla</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="addObservation()"><i class="ti ti-notes"></i>Nueva observación</div>
+      <div class="dd-item" onclick="exportObsPDF()"><i class="ti ti-file-type-pdf"></i>Informe campo PDF</div>
+    </div>
+  </div>
+  <div class="menu-parent"><div class="menu-trigger" data-menu="m-gps">GPS</div>
+    <div class="dropdown" id="m-gps">
+      <div class="dd-item" onclick="toggleGPS()"><i class="ti ti-current-location"></i>Activar / Desactivar GPS</div>
+      <div class="dd-item" onclick="setProjectOrigin()"><i class="ti ti-map-pin-check"></i>Fijar origen aquí</div>
+      <div class="dd-item" onclick="openGPSModal()"><i class="ti ti-coordinate"></i>Editar coordenadas…</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="exportKML()"><i class="ti ti-download"></i>Exportar KML</div>
+    </div>
+  </div>
+  <div class="menu-parent"><div class="menu-trigger" data-menu="m-ar">AR</div>
+    <div class="dropdown" id="m-ar">
+      <div class="dd-item" onclick="startARSurface()"><i class="ti ti-augmented-reality"></i>AR Superficie</div>
+      <div class="dd-item" onclick="startARGPS()"><i class="ti ti-map-pin-bolt"></i>AR GPS</div>
+      <div class="dd-sep"></div>
+      <div class="dd-item" onclick="checkARSupport()"><i class="ti ti-device-mobile"></i>Verificar compatibilidad…</div>
+    </div>
+  </div>
+  <div class="app-title" id="title-bar">ARPlan Pro · Sin proyecto</div>
+</div>
+
+<!-- ===== TOOLBAR ===== -->
+<div id="toolbar">
+  <div class="tb-group">
+    <button class="tb-btn" onclick="triggerFileOpen()" title="Abrir"><i class="ti ti-folder-open"></i></button>
+    <button class="tb-btn" onclick="saveProject()" title="Guardar"><i class="ti ti-device-floppy"></i></button>
+    <button class="tb-btn" onclick="triggerFileOpen()" title="Importar"><i class="ti ti-upload"></i></button>
+  </div>
+  <div class="tb-group">
+    <button class="tb-btn" onclick="undoStroke()" title="Deshacer Ctrl+Z"><i class="ti ti-arrow-back-up"></i></button>
+    <button class="tb-btn" onclick="redoStroke()" title="Rehacer"><i class="ti ti-arrow-forward-up"></i></button>
+  </div>
+  <div class="tb-group">
+    <span class="tb-group-label">Vista</span>
+    <button class="tb-btn" onclick="zoomExtents()" title="Zoom Extents"><i class="ti ti-arrows-maximize"></i></button>
+    <button class="tb-btn" onclick="zoomIn()" title="Zoom In"><i class="ti ti-zoom-in"></i></button>
+    <button class="tb-btn" onclick="zoomOut()" title="Zoom Out"><i class="ti ti-zoom-out"></i></button>
+    <button class="tb-btn" id="tb-pan" onclick="setTool('pan')" title="Encuadre"><i class="ti ti-hand-move"></i></button>
+    <button class="tb-btn active" id="btn-view-top" onclick="setView('top')" title="Planta"><i class="ti ti-layout-2"></i></button>
+    <button class="tb-btn" id="btn-view-iso" onclick="setView('iso')" title="3D"><i class="ti ti-cube"></i></button>
+  </div>
+  <div class="tb-group">
+    <span class="tb-group-label">Dibujo</span>
+    <button class="tb-btn" id="tb-pencil" onclick="setTool('pencil')" title="Lápiz (P)"><i class="ti ti-pencil"></i></button>
+    <button class="tb-btn" id="tb-highlight" onclick="setTool('highlight')" title="Resaltador"><i class="ti ti-highlight"></i></button>
+    <button class="tb-btn" id="tb-line" onclick="setTool('line')" title="Línea (L)"><i class="ti ti-line"></i></button>
+    <button class="tb-btn" id="tb-rect" onclick="setTool('rect')" title="Rectángulo"><i class="ti ti-rectangle"></i></button>
+    <button class="tb-btn" id="tb-circle" onclick="setTool('circle')" title="Círculo"><i class="ti ti-circle"></i></button>
+    <button class="tb-btn" id="tb-cloud" onclick="setTool('cloud')" title="Nube revisión"><i class="ti ti-cloud"></i></button>
+    <button class="tb-btn" id="tb-text" onclick="setTool('text')" title="Texto (T)"><i class="ti ti-text-caption"></i></button>
+    <button class="tb-btn" id="tb-arrow" onclick="setTool('arrow')" title="Flecha"><i class="ti ti-arrow-big-right"></i></button>
+    <button class="tb-btn" id="tb-measure" onclick="setTool('measure')" title="Medir (M)"><i class="ti ti-ruler"></i></button>
+    <button class="tb-btn" id="tb-eraser" onclick="setTool('eraser')" title="Borrar"><i class="ti ti-eraser"></i></button>
+  </div>
+  <div class="tb-group">
+    <span class="tb-group-label">Captura</span>
+    <button class="tb-btn" onclick="doScreenshot()" title="Pantallazo"><i class="ti ti-screenshot"></i></button>
+    <button class="tb-btn" onclick="doCameraPhoto()" title="Foto cámara"><i class="ti ti-camera"></i></button>
+    <button class="tb-btn" id="tb-rec" onclick="toggleScreenRecord()" title="Grabar"><i class="ti ti-video"></i></button>
+  </div>
+  <div class="tb-group">
+    <span class="tb-group-label">GPS &amp; AR</span>
+    <button class="tb-btn" id="tb-gps" onclick="toggleGPS()" title="GPS"><i class="ti ti-current-location"></i></button>
+    <button class="tb-btn ar-hi" onclick="startARSurface()" title="AR Superficie"><i class="ti ti-augmented-reality"></i></button>
+    <button class="tb-btn" style="color:#fcd34d" onclick="startARGPS()" title="AR GPS"><i class="ti ti-map-pin-bolt"></i></button>
+  </div>
+</div>
+
+<!-- ===== LEFT PALETTE ===== -->
+<div id="left-palette">
+  <button class="tool-btn active" id="tl-select" onclick="setTool('select')" title="Seleccionar (S)"><i class="ti ti-pointer"></i></button>
+  <button class="tool-btn" id="tl-pan" onclick="setTool('pan')" title="Encuadre"><i class="ti ti-hand-move"></i></button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tl-line" onclick="setTool('line')" title="Línea"><i class="ti ti-line"></i></button>
+  <button class="tool-btn" id="tl-rect" onclick="setTool('rect')" title="Rectángulo"><i class="ti ti-rectangle"></i></button>
+  <button class="tool-btn" id="tl-circle" onclick="setTool('circle')" title="Círculo"><i class="ti ti-circle"></i></button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tl-pencil" onclick="setTool('pencil')" title="Lápiz"><i class="ti ti-pencil"></i></button>
+  <button class="tool-btn" id="tl-highlight" onclick="setTool('highlight')" title="Resaltador"><i class="ti ti-highlight"></i></button>
+  <button class="tool-btn" id="tl-text" onclick="setTool('text')" title="Texto"><i class="ti ti-text-caption"></i></button>
+  <button class="tool-btn" id="tl-cloud" onclick="setTool('cloud')" title="Nube revisión"><i class="ti ti-cloud"></i></button>
+  <button class="tool-btn" id="tl-arrow" onclick="setTool('arrow')" title="Flecha"><i class="ti ti-arrow-big-right"></i></button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tl-measure" onclick="setTool('measure')" title="Medir"><i class="ti ti-ruler"></i></button>
+  <button class="tool-btn" id="tl-gpspin" onclick="setTool('gpspin')" title="Pin GPS"><i class="ti ti-map-pin"></i></button>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="tl-eraser" onclick="setTool('eraser')" title="Borrar"><i class="ti ti-eraser"></i></button>
+</div>
+
+<!-- ===== VIEWPORT ===== -->
+<div id="viewport">
+  <canvas id="three-canvas"></canvas>
+  <canvas id="draw-canvas"></canvas>
+  <!-- GPS banner -->
+  <div id="gps-banner"></div>
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-tl">
+      <div class="hud-pill"><span class="gps-dot" id="gps-dot"></span><span id="hud-gps-text">GPS desactivado</span></div>
+      <div class="hud-pill"><i class="ti ti-compass"></i><span id="hud-heading">—</span></div>
+      <div class="hud-pill mono" id="hud-latlon" style="display:none"></div>
+    </div>
+    <div id="hud-tr">
+      <button class="mode-btn-hud m3d active" id="hbtn-3d" onclick="setMode('3d')">Vista 3D</button>
+      <button class="mode-btn-hud mar" id="hbtn-ar" onclick="startARSurface()">AR Sup.</button>
+      <button class="mode-btn-hud mgps" id="hbtn-gps" onclick="startARGPS()">AR GPS</button>
+    </div>
+    <div id="hud-bl"><div class="hud-pill mono" id="hud-xyz">X:— Y:—</div></div>
+    <div id="hud-br">
+      <div class="zoom-cluster">
+        <button class="zoom-btn" onclick="zoomIn()" aria-label="Zoom in">+</button>
+        <div class="zoom-val" id="hud-zoom">1.0x</div>
+        <button class="zoom-btn" onclick="zoomOut()" aria-label="Zoom out">−</button>
+      </div>
+    </div>
+    <div id="hud-bc"><div class="hud-pill" id="hud-dist"><i class="ti ti-map-pin"></i><span>—</span></div></div>
+  </div>
+  <!-- AR -->
+  <div id="ar-reticle">
+    <svg width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="24" fill="none" stroke="#00ff88" stroke-width="1.5" opacity=".9"/><circle cx="32" cy="32" r="3" fill="#00ff88"/><line x1="32" y1="4" x2="32" y2="14" stroke="#00ff88" stroke-width="1.2"/><line x1="32" y1="50" x2="32" y2="60" stroke="#00ff88" stroke-width="1.2"/><line x1="4" y1="32" x2="14" y2="32" stroke="#00ff88" stroke-width="1.2"/><line x1="50" y1="32" x2="60" y2="32" stroke="#00ff88" stroke-width="1.2"/></svg>
+  </div>
+  <button id="ar-place-btn" onclick="placeModelAR()"><i class="ti ti-map-pin"></i> Colocar aquí</button>
+  <div id="progress-bar"></div>
+  <!-- Drop zone -->
+  <div id="drop-zone">
+    <i class="ti ti-file-3d dz-icon"></i>
+    <h2>ARPlan Pro</h2>
+    <p>Arrastra un archivo aquí o selecciónalo</p>
+    <p style="font-size:11px;color:var(--text-tert)">GLB · GLTF · DXF</p>
+    <button class="dz-btn" onclick="triggerFileOpen()"><i class="ti ti-folder-open"></i> Seleccionar archivo</button>
+    <button class="dz-ghost" onclick="loadDemo()">Modelo demo</button>
+  </div>
+  <input type="file" id="file-input" accept=".glb,.gltf,.dxf">
+</div>
+
+<!-- ===== RIGHT PANEL ===== -->
+<div id="right-panel">
+  <div class="rp-section">
+    <div class="rp-header" onclick="toggleSection('sec-props')"><span class="rp-title">Propiedades</span><i class="ti ti-chevron-down" id="sec-props-ic"></i></div>
+    <div class="rp-body" id="sec-props">
+      <div class="rp-row"><span class="rp-label">Escala</span><input class="rp-inp" id="prop-scale" value="1:1"></div>
+      <div class="rp-row"><span class="rp-label">Unidades</span>
+        <select class="rp-inp" id="prop-units"><option value="m">metros</option><option value="cm">cm</option><option value="mm">mm</option></select>
+      </div>
+      <div class="rp-row"><span class="rp-label">Opacidad modelo</span>
+        <input type="range" min="0" max="100" value="100" id="prop-opacity" oninput="setModelOpacity(this.value)" style="flex:1">
+      </div>
+    </div>
+  </div>
+  <div class="rp-section">
+    <div class="rp-header" onclick="toggleSection('sec-layers')"><span class="rp-title">Capas</span><i class="ti ti-chevron-down" id="sec-layers-ic"></i></div>
+    <div class="rp-body" id="sec-layers"><div id="layers-list"><p style="font-size:11px;color:var(--text-tert)">Carga un DXF para ver las capas</p></div></div>
+  </div>
+  <div class="rp-section">
+    <div class="rp-header" onclick="toggleSection('sec-tool')"><span class="rp-title">Herramienta activa</span><i class="ti ti-chevron-down" id="sec-tool-ic"></i></div>
+    <div class="rp-body" id="sec-tool">
+      <div id="tool-draw-panel">
+        <div class="rp-sub">Color</div>
+        <div class="color-palette" id="color-palette"></div>
+        <div class="rp-sub">Grosor</div>
+        <div class="stroke-sizes" id="stroke-sizes"></div>
+        <div class="rp-sub">Opacidad trazo</div>
+        <input type="range" min="10" max="100" value="85" id="draw-opacity" oninput="S.drawOpacity=this.value/100" style="width:100%">
+        <div class="rp-sub" style="margin-top:8px">Entrada</div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-sec)"><input type="checkbox" id="stylus-only"> Solo stylus/lápiz</label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-sec);margin-top:3px"><input type="checkbox" id="pressure-mode" checked> Sensibilidad a presión</label>
+      </div>
+      <div id="tool-measure-panel" style="display:none">
+        <div class="rp-sub">Última medición</div>
+        <div id="measure-result" style="font-size:22px;font-weight:500;color:var(--text-pri);padding:6px 0">—</div>
+        <div id="measure-detail" style="font-size:10px;color:var(--text-tert)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="rp-section">
+    <div class="rp-header" onclick="toggleSection('sec-obs')"><span class="rp-title">Observaciones</span><i class="ti ti-chevron-down" id="sec-obs-ic"></i></div>
+    <div class="rp-body" id="sec-obs">
+      <div id="obs-list"></div>
+      <button class="dz-ghost" onclick="addObservation()" style="width:100%;margin-top:4px;font-size:11px;padding:6px"><i class="ti ti-plus"></i> Nueva observación</button>
+    </div>
+  </div>
+  <div class="rp-section">
+    <div class="rp-header" onclick="toggleSection('sec-gps')"><span class="rp-title">GPS del proyecto</span><i class="ti ti-chevron-down" id="sec-gps-ic"></i></div>
+    <div class="rp-body" id="sec-gps">
+      <div class="gps-card">
+        <div class="gps-row"><span>Latitud</span><span class="gps-val" id="gps-lat">—</span></div>
+        <div class="gps-row"><span>Longitud</span><span class="gps-val" id="gps-lon">—</span></div>
+        <div class="gps-row"><span>Altitud</span><span class="gps-val" id="gps-alt">—</span></div>
+        <div class="gps-row"><span>Precisión</span><span class="gps-val" id="gps-acc">—</span></div>
+        <div class="gps-row"><span>Brújula</span><span class="gps-val" id="gps-hdg">—</span></div>
+        <div class="gps-row"><span>Al proyecto</span><span class="gps-val" id="gps-dist-proj">—</span></div>
+      </div>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">
+        <button class="dz-ghost" onclick="setProjectOrigin()" id="btn-set-origin" style="font-size:11px;padding:6px"><i class="ti ti-map-pin-plus"></i> Usar posición actual como origen</button>
+        <div style="font-size:10px;color:var(--text-tert)">Coordenadas del proyecto:</div>
+        <div style="display:flex;gap:4px">
+          <input id="proj-lat-in" placeholder="Lat" style="flex:1;height:26px;background:#0f172a;border:.5px solid var(--border2);border-radius:var(--rs);color:var(--text-pri);font-size:11px;padding:0 4px">
+          <input id="proj-lon-in" placeholder="Lon" style="flex:1;height:26px;background:#0f172a;border:.5px solid var(--border2);border-radius:var(--rs);color:var(--text-pri);font-size:11px;padding:0 4px">
+        </div>
+        <button class="dz-ghost" onclick="applyProjectCoords()" style="font-size:11px;padding:6px">Aplicar coordenadas</button>
+        <button class="dz-ghost" onclick="requestCompassPermission()"
+          style="font-size:11px;padding:6px"><i class="ti ti-compass"></i> Activar brújula</button>
+        <button class="dz-ghost" onclick="openScaleCalibration()"
+          style="font-size:11px;padding:6px"><i class="ti ti-ruler"></i> Calibrar escala</button>
+        <button class="dz-ghost" onclick="toggleGPS()" id="btn-gps-toggle" style="font-size:11px;padding:6px"><i class="ti ti-current-location"></i> Activar GPS</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel FAB (tablet) -->
+<div id="panel-fab" onclick="openDrawer()"><i class="ti ti-layout-sidebar-right"></i></div>
+<div id="drawer-overlay" onclick="closeDrawer()"></div>
+
+<!-- ===== STATUS BAR ===== -->
+<div id="statusbar">
+  <div class="sb-item" id="sb-file"><i class="ti ti-file"></i> Sin proyecto</div>
+  <div class="sb-item" id="sb-layers"><i class="ti ti-layers-difference"></i> —</div>
+  <div class="sb-item" id="sb-tool"><i class="ti ti-pointer"></i> Selección</div>
+  <div class="sb-item" id="sb-gps"><i class="ti ti-current-location"></i> GPS —</div>
+  <div class="sb-sp"></div>
+  <div class="sb-item ok" id="sb-save"><i class="ti ti-circle-check"></i> Listo</div>
+</div>
+
+
+<!-- model-viewer hidden (iOS AR fallback) -->
+<div id="mv-container" style="display:none;position:fixed;inset:0;z-index:5000;background:#000">
+  <button onclick="document.getElementById('mv-container').style.display='none'"
+    style="position:absolute;top:16px;right:16px;z-index:10;background:rgba(0,0,0,.7);
+    color:#fff;border:none;padding:10px 18px;border-radius:20px;font-size:14px;cursor:pointer">
+    <i class="ti ti-x"></i> Cerrar
+  </button>
+  <model-viewer id="mv-viewer" ar ar-modes="webxr scene-viewer quick-look"
+    camera-controls auto-rotate shadow-intensity="1"
+    style="width:100%;height:100%;background:#000">
+    <button slot="ar-button" style="background:#22c55e;color:#fff;border:none;
+      padding:12px 24px;border-radius:22px;font-size:15px;position:absolute;
+      bottom:40px;left:50%;transform:translateX(-50%)">
+      <i class="ti ti-augmented-reality"></i> Ver en AR
+    </button>
+  </model-viewer>
+</div>
+
+<!-- Tutorial overlay (first run) -->
+<div id="tutorial-overlay" style="display:none;position:fixed;inset:0;z-index:6000;
+  background:rgba(10,15,25,.96);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:24px;gap:14px">
+  <i class="ti ti-augmented-reality" style="font-size:48px;color:#3b82f6;opacity:.8"></i>
+  <h2 style="color:#f9fafb;font-size:18px;font-weight:500;text-align:center;margin:0">
+    Bienvenido a ARPlan Pro</h2>
+  <div id="tutorial-steps" style="max-width:360px;width:100%"></div>
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button id="tut-prev" onclick="tutNav(-1)"
+      style="padding:9px 18px;background:transparent;color:#9ca3af;
+      border:.5px solid rgba(255,255,255,.2);border-radius:20px;font-size:13px;
+      font-family:inherit;cursor:pointer">Anterior</button>
+    <button id="tut-next" onclick="tutNav(1)"
+      style="padding:9px 22px;background:#3b82f6;color:#fff;border:none;
+      border-radius:20px;font-size:13px;font-family:inherit;cursor:pointer">Siguiente</button>
+  </div>
+  <button onclick="closeTutorial()"
+    style="font-size:11px;color:#6b7280;background:transparent;border:none;
+    cursor:pointer;text-decoration:underline;padding:4px">Saltar tutorial</button>
+</div>
+
+</div><!-- #app -->
+
+<div id="toast-ct"></div>
+<div id="modal-overlay" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<!-- ===== SYNC BOOTSTRAP: define globals before module loads ===== -->
+<script>
+(function(){
+  // Pure-DOM functions available immediately
+  window.closeAllMenus = function(){
+    document.querySelectorAll('.dropdown').forEach(function(d){d.classList.remove('open');});
+    document.querySelectorAll('.menu-trigger').forEach(function(t){t.classList.remove('open');});
+  };
+  window.showToast = function(msg,type){
+    var tc=document.getElementById('toast-ct'); if(!tc)return;
+    var t=document.createElement('div');
+    t.className='toast'+(type?' '+type:'');
+    t.textContent=msg; t.style.animation='tin .2s ease forwards';
+    tc.appendChild(t);
+    setTimeout(function(){t.style.animation='tout .3s ease forwards';setTimeout(function(){if(t.parentNode)t.remove();},300);},2800);
+  };
+  window.toggleSection = function(id){
+    var b=document.getElementById(id),c=document.getElementById(id+'-ic');
+    if(!b)return;
+    var open=b.style.display!=='none';
+    b.style.display=open?'none':'flex';
+    if(c)c.style.transform=open?'rotate(-90deg)':'';
+  };
+  window.toggleRightPanel = function(){
+    var rp=document.getElementById('right-panel');
+    if(!rp)return;
+    rp.style.display=rp.style.display==='none'?'flex':'none';
+  };
+  window.openDrawer = function(){
+    var rp=document.getElementById('right-panel'),ov=document.getElementById('drawer-overlay');
+    if(!rp)return;
+    rp.classList.add('drawer'); rp.style.display='flex';
+    if(ov)ov.style.display='block';
+  };
+  window.closeDrawer = function(){
+    var rp=document.getElementById('right-panel'),ov=document.getElementById('drawer-overlay');
+    if(!rp)return;
+    rp.classList.remove('drawer'); rp.style.display='none';
+    if(ov)ov.style.display='none';
+  };
+  window.closeModal = function(e){
+    var o=document.getElementById('modal-overlay');
+    if(!e||e.target===o)o.style.display='none';
+  };
+  window.showModal = function(html){
+    document.getElementById('modal-box').innerHTML=html;
+    document.getElementById('modal-overlay').style.display='flex';
+  };
+  // Stubs for module functions — queue calls until module is ready
+  var FNAMES=['triggerFileOpen','handleFileSelect','loadDemo',
+    'zoomIn','zoomOut','zoomExtents','setView','toggleGrid',
+    'setTool','setMode','setModelOpacity','undoStroke','redoStroke','clearDrawing',
+    'doScreenshot','doCameraPhoto','toggleScreenRecord',
+    'toggleGPS','setProjectOrigin','applyProjectCoords','openGPSModal','applyGPSModal','exportKML',
+    'startARSurface','startARGPS','checkARSupport','placeModelAR',
+    'addObservation','saveObservation','exportObsPDF','toggleLayer',
+    'saveProject','applyProjectCoords'];
+  var Q={};
+  FNAMES.forEach(function(n){
+    Q[n]=[];
+    if(!window[n]) window[n]=function(){Q[n].push(Array.prototype.slice.call(arguments));};
+  });
+  window.__moduleReady=function(){
+    FNAMES.forEach(function(n){
+      if(Q[n]&&Q[n].length&&typeof window[n]==='function'){
+        Q[n].forEach(function(a){window[n].apply(window,a);});
+      }
+      Q[n]=[];
+    });
+  };
+  // Menu bindings — pure DOM
+  document.addEventListener('DOMContentLoaded',function(){
+    document.querySelectorAll('.menu-trigger').forEach(function(t){
+      t.addEventListener('click',function(e){
+        e.stopPropagation();
+        var id=t.dataset.menu, dd=document.getElementById(id);
+        var was=dd&&dd.classList.contains('open');
+        window.closeAllMenus();
+        if(dd&&!was){dd.classList.add('open');t.classList.add('open');}
+      });
+    });
+    document.addEventListener('click',function(){window.closeAllMenus();});
+    // File input handler
+    var fi=document.getElementById('file-input');
+    if(fi) fi.addEventListener('change',function(){if(fi.files[0])window.handleFileSelect(fi.files[0]);});
+    // Drag & drop
+    var dz=document.getElementById('drop-zone');
+    if(dz){
+      dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('drag-over');});
+      dz.addEventListener('dragleave',function(){dz.classList.remove('drag-over');});
+      dz.addEventListener('drop',function(e){
+        e.preventDefault();dz.classList.remove('drag-over');
+        var f=e.dataTransfer.files[0]; if(f)window.handleFileSelect(f);
+      });
+    }
+  });
+})();
+</script>
+
+<!-- Three.js -->
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+/* ── STATE ─────────────────────────────────────────────────── */
+const S = {
+  fileName:null, activeTool:'select',
+  activeColor:'#ef4444', strokeWidth:2, drawOpacity:0.85,
+  stylusOnly:false, pressureMode:true,
+  layers:[], observations:JSON.parse(localStorage.getItem('arplan_obs')||'[]'),
+  gpsActive:false, gpsWatch:null, gpsPos:null, heading:null,
+  projectLat:null, projectLon:null,
+  modelObj:null, arSession:null, hitTestSource:null, modelPlaced:false,
+  currentMode:'3d', gridVisible:true, recording:false,
+  mediaRecorder:null, recordedChunks:[],
+  strokes:JSON.parse(localStorage.getItem('arplan_strokes')||'[]'),
+  undoStack:[],
+};
+// expose S for sliders in HTML
+window.S = S;
+
+/* ── THREE.JS ──────────────────────────────────────────────── */
+const vpEl   = document.getElementById('viewport');
+const canvas3 = document.getElementById('three-canvas');
+
+const renderer = new THREE.WebGLRenderer({
+  canvas:canvas3, antialias:true, alpha:true, preserveDrawingBuffer:true
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.xr.enabled = true;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55,1,0.01,2000);
+camera.position.set(0,15,20);
+
+// OrbitControls — must use the THREE canvas, not the draw canvas
+const controls = new OrbitControls(camera, canvas3);
+controls.enableDamping   = true;
+controls.dampingFactor   = 0.08;
+controls.screenSpacePanning = true;
+controls.enableZoom      = true;
+controls.zoomSpeed       = 1.2;
+controls.rotateSpeed     = 0.8;
+controls.panSpeed        = 0.8;
+// Touch gestures: one finger = rotate, two fingers = pan/zoom
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const dL = new THREE.DirectionalLight(0xffffff,1.2);
+dL.position.set(10,20,10); dL.castShadow=true; scene.add(dL);
+
+const grid = new THREE.GridHelper(200,200,0x334155,0x1e293b);
+scene.add(grid);
+
+const reticleMesh = new THREE.Mesh(
+  new THREE.RingGeometry(0.15,0.22,32).rotateX(-Math.PI/2),
+  new THREE.MeshBasicMaterial({color:0x00ff88,side:THREE.DoubleSide})
+);
+reticleMesh.visible=false; scene.add(reticleMesh);
+
+function resizeAll(){
+  const w=vpEl.clientWidth, h=vpEl.clientHeight||1;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  drawCanvas.resize();
+}
+window.addEventListener('resize',resizeAll);
+// Also observe viewport size changes (split-panel, rotation)
+if(window.ResizeObserver){
+  new ResizeObserver(resizeAll).observe(vpEl);
+}
+
+// Render loop
+renderer.setAnimationLoop((t,frame)=>{
+  if(frame && S.hitTestSource){
+    const ref=renderer.xr.getReferenceSpace();
+    const hits=frame.getHitTestResults(S.hitTestSource);
+    if(hits.length>0){
+      const pose=hits[0].getPose(ref);
+      reticleMesh.visible=true;
+      reticleMesh.matrix.fromArray(pose.transform.matrix);
+      reticleMesh.matrix.decompose(reticleMesh.position,reticleMesh.quaternion,reticleMesh.scale);
+      document.getElementById('ar-place-btn').style.display='block';
+    } else { reticleMesh.visible=false; }
+  }
+  if(!renderer.xr.isPresenting) controls.update();
+  renderer.render(scene,camera);
+  document.getElementById('hud-zoom').textContent = camera.zoom.toFixed(2)+'x';
+});
+
+renderer.xr.addEventListener('sessionstart',async()=>{
+  controls.enabled=false;
+  document.getElementById('ar-reticle').style.display='block';
+  const session=renderer.xr.getSession();
+  S.hitTestSource=await session.requestHitTestSource({space:await session.requestReferenceSpace('viewer')});
+  S.arSession=session;
+  if(S.modelObj) S.modelObj.position.set(0,-999,0);
+  S.modelPlaced=false;
+});
+renderer.xr.addEventListener('sessionend',()=>{
+  controls.enabled=true;
+  document.getElementById('ar-reticle').style.display='none';
+  document.getElementById('ar-place-btn').style.display='none';
+  S.hitTestSource=null; S.arSession=null;
+  if(S.modelObj) S.modelObj.position.set(0,0,0);
+  setMode('3d'); showToast('Sesión AR finalizada');
+});
+
+window.placeModelAR=function(){
+  if(S.modelObj&&reticleMesh.visible){
+    S.modelObj.position.copy(reticleMesh.position);
+    S.modelPlaced=true;
+    document.getElementById('ar-place-btn').style.display='none';
+    showToast('Modelo colocado','ok');
+  }
+};
+
+/* ── DRAWING CANVAS ────────────────────────────────────────── */
+const drawEl  = document.getElementById('draw-canvas');
+const ctx2d   = drawEl.getContext('2d');
+let curStroke = null;
+
+const drawCanvas = {
+  resize(){
+    const r=vpEl.getBoundingClientRect();
+    const dpr=Math.min(devicePixelRatio,2);
+    drawEl.width=r.width*dpr; drawEl.height=r.height*dpr;
+    drawEl.style.width=r.width+'px'; drawEl.style.height=r.height+'px';
+    ctx2d.setTransform(dpr,0,0,dpr,0,0);
+    redrawAll();
+  },
+  getPos(e){
+    const r=drawEl.getBoundingClientRect();
+    return{x:e.clientX-r.left, y:e.clientY-r.top};
+  }
+};
+
+const DRAW_TOOLS=new Set(['pencil','highlight','line','rect','circle','cloud','text','arrow','eraser','measure','gpspin']);
+
+// ── Pointer events for drawing (stylus + touch + mouse) ──
+drawEl.addEventListener('pointerdown',e=>{
+  const tool=S.activeTool;
+  if(!DRAW_TOOLS.has(tool)) return;
+  if(S.stylusOnly && e.pointerType==='touch') return;
+  e.preventDefault();
+  try{ drawEl.setPointerCapture(e.pointerId); }catch(_){}
+  const pos=drawCanvas.getPos(e);
+  const pres=(S.pressureMode&&e.pressure>0)?Math.max(0.3,e.pressure):1;
+
+  if(tool==='gpspin'){
+    const label=S.gpsPos?`${S.gpsPos.latitude.toFixed(4)},${S.gpsPos.longitude.toFixed(4)}`:'PIN';
+    pushStroke({tool:'gpspin',color:S.activeColor,op:1,pos,label});
+    if(S.gpsPos) showToast('Pin GPS: '+label,'ok'); else showToast('GPS no activo','err');
+    return;
+  }
+  if(tool==='eraser'){
+    S.strokes=S.strokes.filter(st=>{
+      if(st.tool==='pencil'||st.tool==='highlight')
+        return !st.points.some(p=>Math.hypot(p.x-pos.x,p.y-pos.y)<18);
+      return true;
+    });
+    redrawAll(); autoSave(); return;
+  }
+  if(tool==='measure'){
+    S.measurePoints.push(pos);
+    if(S.measurePoints.length===2){
+      const dx=S.measurePoints[1].x-S.measurePoints[0].x;
+      const dy=S.measurePoints[1].y-S.measurePoints[0].y;
+      const px=Math.sqrt(dx*dx+dy*dy);
+      const m=(px/Math.max(S.zoomFactor,1)).toFixed(2);
+      document.getElementById('measure-result').textContent=m+' m';
+      document.getElementById('measure-detail').textContent=Math.round(px)+'px en pantalla';
+      pushStroke({tool:'line',color:'#00ff88',lw:1.5,op:0.9,startPos:S.measurePoints[0],endPos:S.measurePoints[1]});
+      S.measurePoints=[];
+    } else { showToast('Toca el segundo punto'); }
+    return;
+  }
+  curStroke={
+    tool, color:tool==='highlight'?S.activeColor+'55':S.activeColor,
+    lw:S.strokeWidth*(tool==='highlight'?8:1)*(0.5+pres*0.5),
+    op:tool==='highlight'?0.4:S.drawOpacity,
+    points:[pos], startPos:pos
+  };
+},{passive:false});
+
+drawEl.addEventListener('pointermove',e=>{
+  if(!curStroke) return;
+  e.preventDefault();
+  const pos=drawCanvas.getPos(e);
+  const pres=(S.pressureMode&&e.pressure>0)?Math.max(0.3,e.pressure):1;
+  const tool=curStroke.tool;
+  if(tool==='pencil'||tool==='highlight'){
+    curStroke.points.push(pos);
+    curStroke.lw=S.strokeWidth*(tool==='highlight'?8:1)*(0.4+pres*0.6);
+    redrawAll(); drawCurStroke();
+  } else {
+    curStroke.endPos=pos; redrawAll(); drawPreview(curStroke.startPos,pos,tool);
+  }
+  document.getElementById('hud-xyz').textContent=`X:${Math.round(pos.x)}  Y:${Math.round(pos.y)}`;
+},{passive:false});
+
+drawEl.addEventListener('pointerup',e=>{
+  if(!curStroke) return;
+  const pos=drawCanvas.getPos(e);
+  curStroke.endPos=pos;
+  if(curStroke.tool==='circle'){
+    const dx=pos.x-curStroke.startPos.x, dy=pos.y-curStroke.startPos.y;
+    curStroke.radius=Math.sqrt(dx*dx+dy*dy);
+  }
+  if(curStroke.tool==='text'){ openTextModal(pos); curStroke=null; return; }
+  if(curStroke.points?.length<2 && !curStroke.endPos){ curStroke=null; return; }
+  pushStroke({...curStroke, points:curStroke.points?[...curStroke.points]:undefined});
+  curStroke=null; redrawAll();
+});
+
+// Prevent iOS/Android from hijacking touch on the draw canvas
+drawEl.addEventListener('touchstart',e=>{ if(DRAW_TOOLS.has(S.activeTool)) e.preventDefault(); },{passive:false});
+drawEl.addEventListener('touchmove', e=>{ if(DRAW_TOOLS.has(S.activeTool)) e.preventDefault(); },{passive:false});
+
+// ── When NOT in a draw tool, pass touch through to OrbitControls ──
+// OrbitControls listens on canvas3; we need to let touches fall through draw canvas
+// Solution: toggle pointer-events on draw canvas based on current tool
+function syncDrawCanvasPointerEvents(){
+  drawEl.style.pointerEvents = DRAW_TOOLS.has(S.activeTool) ? 'all' : 'none';
+}
+// Initialize
+syncDrawCanvasPointerEvents();
+
+function drawCurStroke(){
+  if(!curStroke||!curStroke.points||curStroke.points.length<2) return;
+  const{points,color,lw,op}=curStroke;
+  ctx2d.save(); ctx2d.globalAlpha=op; ctx2d.strokeStyle=color;
+  ctx2d.lineWidth=lw; ctx2d.lineCap='round'; ctx2d.lineJoin='round';
+  ctx2d.beginPath(); ctx2d.moveTo(points[0].x,points[0].y);
+  for(let i=1;i<points.length-1;i++){
+    const mx=(points[i].x+points[i+1].x)/2, my=(points[i].y+points[i+1].y)/2;
+    ctx2d.quadraticCurveTo(points[i].x,points[i].y,mx,my);
+  }
+  ctx2d.lineTo(points[points.length-1].x,points[points.length-1].y);
+  ctx2d.stroke(); ctx2d.restore();
+}
+
+function drawPreview(start,end,tool){
+  ctx2d.save(); ctx2d.strokeStyle=S.activeColor; ctx2d.lineWidth=S.strokeWidth;
+  ctx2d.setLineDash([6,4]); ctx2d.globalAlpha=0.7; ctx2d.lineCap='round'; ctx2d.lineJoin='round';
+  ctx2d.beginPath();
+  if(tool==='line'||tool==='arrow'){
+    ctx2d.moveTo(start.x,start.y); ctx2d.lineTo(end.x,end.y);
+    if(tool==='arrow') drawHead(start,end);
+  } else if(tool==='rect'){
+    ctx2d.rect(start.x,start.y,end.x-start.x,end.y-start.y);
+  } else if(tool==='circle'){
+    ctx2d.arc(start.x,start.y,Math.hypot(end.x-start.x,end.y-start.y),0,Math.PI*2);
+  } else if(tool==='cloud'){
+    drawCloud(ctx2d,start,end);
+  }
+  ctx2d.stroke(); ctx2d.restore();
+}
+
+function drawHead(from,to){
+  const a=Math.atan2(to.y-from.y,to.x-from.x), L=14;
+  ctx2d.moveTo(to.x,to.y);
+  ctx2d.lineTo(to.x-L*Math.cos(a-0.4),to.y-L*Math.sin(a-0.4));
+  ctx2d.moveTo(to.x,to.y);
+  ctx2d.lineTo(to.x-L*Math.cos(a+0.4),to.y-L*Math.sin(a+0.4));
+}
+
+function drawCloud(ctx,s,e){
+  const r=14, x1=Math.min(s.x,e.x),y1=Math.min(s.y,e.y);
+  const x2=Math.max(s.x,e.x),y2=Math.max(s.y,e.y);
+  const w=x2-x1, h=y2-y1;
+  const hs=Math.max(3,Math.floor(w/r/2)), vs=Math.max(2,Math.floor(h/r/2));
+  ctx.beginPath();
+  for(let i=0;i<hs;i++) ctx.arc(x1+w/hs*(i+.5),y1,r/2,Math.PI,0,false);
+  for(let i=0;i<vs;i++) ctx.arc(x2,y1+h/vs*(i+.5),r/2,-Math.PI/2,Math.PI/2,false);
+  for(let i=hs;i>0;i--) ctx.arc(x1+w/hs*(i-.5),y2,r/2,0,Math.PI,false);
+  for(let i=vs;i>0;i--) ctx.arc(x1,y1+h/vs*(i-.5),r/2,Math.PI/2,-Math.PI/2,false);
+  ctx.closePath();
+}
+
+function redrawAll(){
+  const r=vpEl.getBoundingClientRect();
+  ctx2d.clearRect(0,0,r.width,r.height);
+  S.strokes.forEach(st=>renderStroke(ctx2d,st));
+  if(curStroke&&(curStroke.tool==='pencil'||curStroke.tool==='highlight')) drawCurStroke();
+}
+
+function renderStroke(ctx,st){
+  ctx.save(); ctx.globalAlpha=st.op||1;
+  ctx.strokeStyle=st.color||'#fff'; ctx.lineWidth=st.lw||2;
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.setLineDash([]);
+  const t=st.tool;
+  if(t==='pencil'||t==='highlight'){
+    const p=st.points; if(!p||p.length<2){ctx.restore();return;}
+    ctx.beginPath(); ctx.moveTo(p[0].x,p[0].y);
+    for(let i=1;i<p.length-1;i++){
+      const mx=(p[i].x+p[i+1].x)/2, my=(p[i].y+p[i+1].y)/2;
+      ctx.quadraticCurveTo(p[i].x,p[i].y,mx,my);
+    }
+    ctx.lineTo(p[p.length-1].x,p[p.length-1].y); ctx.stroke();
+  } else if(t==='line'){
+    ctx.beginPath(); ctx.moveTo(st.startPos.x,st.startPos.y); ctx.lineTo(st.endPos.x,st.endPos.y); ctx.stroke();
+  } else if(t==='arrow'){
+    ctx.beginPath(); ctx.moveTo(st.startPos.x,st.startPos.y); ctx.lineTo(st.endPos.x,st.endPos.y); ctx.stroke();
+    const a=Math.atan2(st.endPos.y-st.startPos.y,st.endPos.x-st.startPos.x),L=14;
+    ctx.beginPath();
+    ctx.moveTo(st.endPos.x,st.endPos.y);
+    ctx.lineTo(st.endPos.x-L*Math.cos(a-0.4),st.endPos.y-L*Math.sin(a-0.4));
+    ctx.moveTo(st.endPos.x,st.endPos.y);
+    ctx.lineTo(st.endPos.x-L*Math.cos(a+0.4),st.endPos.y-L*Math.sin(a+0.4));
+    ctx.stroke();
+  } else if(t==='rect'){
+    ctx.beginPath(); ctx.rect(st.startPos.x,st.startPos.y,st.endPos.x-st.startPos.x,st.endPos.y-st.startPos.y); ctx.stroke();
+  } else if(t==='circle'){
+    ctx.beginPath(); ctx.arc(st.startPos.x,st.startPos.y,st.radius||20,0,Math.PI*2); ctx.stroke();
+  } else if(t==='cloud'){
+    drawCloud(ctx,st.startPos,st.endPos); ctx.stroke();
+  } else if(t==='text'){
+    ctx.font=`${st.fontSize||14}px sans-serif`; ctx.fillStyle=st.color; ctx.globalAlpha=1;
+    (st.text||'').split('\n').forEach((l,i)=>ctx.fillText(l,st.pos.x,st.pos.y+i*(st.fontSize||14)*1.3));
+  } else if(t==='gpspin'){
+    ctx.fillStyle=st.color;
+    ctx.beginPath(); ctx.arc(st.pos.x,st.pos.y-8,6,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(st.pos.x,st.pos.y); ctx.lineTo(st.pos.x-5,st.pos.y-8); ctx.lineTo(st.pos.x+5,st.pos.y-8); ctx.closePath(); ctx.fill();
+    if(st.label){ctx.font='10px monospace';ctx.fillStyle=st.color;ctx.fillText(st.label,st.pos.x+8,st.pos.y-5);}
+  }
+  ctx.restore();
+}
+
+function pushStroke(st){
+  S.undoStack.push(JSON.stringify(S.strokes));
+  if(S.undoStack.length>50) S.undoStack.shift();
+  S.strokes.push(st); autoSave(); redrawAll();
+}
+
+function openTextInput(pos){
+  const ta=document.createElement('textarea');
+  ta.className='floating-text'; ta.style.left=pos.x+'px'; ta.style.top=pos.y+'px';
+  vpEl.appendChild(ta); ta.focus();
+  ta.addEventListener('blur',()=>{
+    if(ta.value.trim()) pushStroke({tool:'text',color:S.activeColor,op:1,text:ta.value,pos,fontSize:14});
+    ta.remove();
+  });
+  ta.addEventListener('keydown',e=>{if(e.key==='Escape')ta.remove();});
+}
+
+/* ── FILE LOADING ──────────────────────────────────────────── */
+const gltfLoader=new GLTFLoader();
+let S_zoomFactor=1;
+S.zoomFactor=1; // expose
+
+window.triggerFileOpen=function(type){
+  const fi=document.getElementById('file-input');
+  fi.accept=type==='dxf'?'.dxf':type==='glb'?'.glb,.gltf':'.glb,.gltf,.dxf';
+  fi.value=''; fi.click();
+};
+
+window.handleFileSelect=function(file){
+  if(!file)return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  S.fileName=file.name;
+  document.getElementById('title-bar').textContent='ARPlan Pro · '+file.name;
+  document.getElementById('sb-file').innerHTML='<i class="ti ti-file"></i> '+file.name;
+  document.getElementById('drop-zone').style.display='none';
+  setProgress(10);
+  // Save to IndexedDB for persistence across sessions
+  const fr = new FileReader();
+  fr.onload = ab => {
+    dbSaveModel(file.name, ab.target.result)
+      .then(() => console.log('[DB] model saved:', file.name))
+      .catch(e => console.warn('[DB] save error:', e));
+  };
+  fr.readAsArrayBuffer(file);
+  S.modelBlobURL = URL.createObjectURL(file);
+
+  if(ext==='glb'||ext==='gltf'){
+    if(ext==='gltf') showToast('Nota: .gltf puede tener archivos externos. Prefiere .glb','err');
+    loadGLTF(file);
+  }
+  else if(ext==='dxf') loadDXF(file);
+  else { showToast('Formato no soportado: '+ext,'err'); setProgress(0); }
+};
+
+function setProgress(p){
+  const b=document.getElementById('progress-bar');
+  b.style.width=p+'%';
+  if(p===0||p>=100) setTimeout(()=>b.style.width='0%',400);
+}
+
+function loadGLTF(file){
+  const url=URL.createObjectURL(file); setProgress(30);
+  gltfLoader.load(url,gltf=>{
+    setProgress(80);
+    if(S.modelObj) scene.remove(S.modelObj);
+    S.modelObj=gltf.scene;
+    normObj(S.modelObj,20);
+    scene.add(S.modelObj);
+    URL.revokeObjectURL(url); setProgress(0);
+    zoomExtents();
+    showToast('Modelo: '+file.name,'ok');
+    updateLayerPanel([{name:'MODELO',color:'#3b82f6',visible:true}]);
+    document.getElementById('sb-layers').innerHTML='<i class="ti ti-layers-difference"></i> 1 capa';
+  },p=>{if(p.total)setProgress(30+(p.loaded/p.total)*50);},
+  err=>{showToast('Error al cargar GLB','err');console.error(err);setProgress(0);});
+}
+
+function normObj(obj, targetSize){
+  const box=new THREE.Box3().setFromObject(obj);
+  const size=box.getSize(new THREE.Vector3());
+  const maxD=Math.max(size.x,size.y,size.z,0.001);
+  const s=targetSize/maxD;
+  obj.scale.setScalar(s); S.zoomFactor=s;
+  const center=box.getCenter(new THREE.Vector3());
+  obj.position.set(-center.x*s, 0, -center.z*s);
+}
+
+function loadDXF(file){
+  const reader=new FileReader(); setProgress(20);
+  reader.onload=e=>{
+    try{
+      const text=e.target.result; setProgress(40);
+      
+      // Use Web Worker for non-blocking parse
+      let parsed;
+      try {
+        parsed = await parseDXFInWorker(text);
+      } catch (workerErr) {
+        console.warn('[DXF] worker failed, using fallback:', workerErr);
+        parsed = parseDXFFallback(text);
+      }
+      setProgress(70);
+      const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length;
+      if(!total){ showToast('DXF sin geometría legible','err'); setProgress(0); return; }
+      if(S.modelObj) scene.remove(S.modelObj);
+      const group=new THREE.Group();
+      const LC=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+      const LM={}; let ci=0;
+      parsed.layers.forEach(n=>{ LM[n]=LC[ci++%LC.length]; });
+      const mat=l=>new THREE.LineBasicMaterial({color:LM[l]||'#3b82f6'});
+
+      parsed.segments.forEach(s=>{
+        const g=new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(s.x1,0,s.y1), new THREE.Vector3(s.x2,0,s.y2)]);
+        group.add(new THREE.Line(g,mat(s.layer)));
+      });
+      parsed.circles.forEach(c=>{
+        const pts=[], N=Math.max(32,Math.floor(c.r*4));
+        for(let i=0;i<=N;i++){const a=i/N*Math.PI*2; pts.push(new THREE.Vector3(c.cx+Math.cos(a)*c.r,0,c.cy+Math.sin(a)*c.r));}
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(c.layer)));
+      });
+      parsed.arcs.forEach(a=>{
+        const pts=[];
+        let s0=a.startAngle*Math.PI/180, e0=a.endAngle*Math.PI/180;
+        if(e0<=s0) e0+=Math.PI*2;
+        const N=Math.max(16,Math.floor((e0-s0)/(Math.PI/32)));
+        for(let i=0;i<=N;i++){const ang=s0+(e0-s0)*i/N; pts.push(new THREE.Vector3(a.cx+Math.cos(ang)*a.r,0,a.cy+Math.sin(ang)*a.r));}
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(a.layer)));
+      });
+
+      const box=new THREE.Box3().setFromObject(group);
+      if(box.isEmpty()){showToast('No se pudo calcular bounding box','err');setProgress(0);return;}
+      const sz=box.getSize(new THREE.Vector3()), maxD=Math.max(sz.x,sz.z,0.001);
+      const sc=40/maxD; group.scale.set(sc,sc,sc); S.zoomFactor=sc;
+      const ctr=box.getCenter(new THREE.Vector3());
+      group.position.set(-ctr.x*sc,0,-ctr.z*sc);
+
+      S.modelObj=group; scene.add(group);
+      const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
+      updateLayerPanel(layObjs.length?layObjs:[{name:'0',color:'#3b82f6',visible:true}]);
+      document.getElementById('sb-layers').innerHTML=`<i class="ti ti-layers-difference"></i> ${layObjs.length} capas`;
+      setProgress(0); zoomExtents();
+      showToast(`DXF: ${file.name} — ${total} entidades`,'ok');
+    }catch(err){ console.error(err); showToast('Error DXF: '+err.message,'err'); setProgress(0); }
+  };
+  reader.readAsText(file);
+}
+
+function parseDXF(text){
+  const raw=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const pairs=[];
+  for(let i=0;i+1<raw.length;i+=2){
+    const code=parseInt(raw[i].trim(),10), value=raw[i+1].trim();
+    if(!isNaN(code)) pairs.push({code,value});
+  }
+  const res={segments:[],circles:[],arcs:[],layers:[]};
+  const lset=new Set();
+  // Find ENTITIES section
+  let pi=0, inEnt=false;
+  while(pi<pairs.length){
+    if(pairs[pi].code===0&&pairs[pi].value==='SECTION'){ pi++;
+      if(pi<pairs.length&&pairs[pi].code===2&&pairs[pi].value==='ENTITIES'){inEnt=true;pi++;break;} }
+    pi++;
+  }
+  if(!inEnt) pi=0; // fallback: scan whole file
+  while(pi<pairs.length){
+    const p=pairs[pi];
+    if(p.code===0&&p.value==='ENDSEC') break;
+    if(p.code===0&&p.value==='LINE'){
+      pi++; let x1=0,y1=0,x2=0,y2=0,layer='0';
+      while(pi<pairs.length&&pairs[pi].code!==0){
+        const{code,value}=pairs[pi];
+        if(code===8) layer=value;
+        if(code===10) x1=parseFloat(value);
+        if(code===20) y1=parseFloat(value);
+        if(code===11) x2=parseFloat(value);
+        if(code===21) y2=parseFloat(value);
+        pi++;
+      }
+      if(isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)&&(Math.abs(x1-x2)>1e-10||Math.abs(y1-y2)>1e-10)){
+        res.segments.push({x1,y1,x2,y2,layer}); lset.add(layer); }
+      continue;
+    }
+    if(p.code===0&&(p.value==='LWPOLYLINE'||p.value==='POLYLINE'||p.value==='SPLINE')){
+      pi++; const pts=[]; let layer='0',closed=false,lx=null,ly=null;
+      while(pi<pairs.length&&pairs[pi].code!==0){
+        const{code,value}=pairs[pi];
+        if(code===8) layer=value;
+        if(code===70&&(parseInt(value)&1)) closed=true;
+        if(code===10){lx=parseFloat(value);}
+        if(code===20){ly=parseFloat(value); if(lx!==null&&isFinite(lx)&&isFinite(ly)){pts.push([lx,ly]);lx=null;}}
+        pi++;
+      }
+      if(closed&&pts.length) pts.push(pts[0]);
+      for(let j=0;j<pts.length-1;j++) res.segments.push({x1:pts[j][0],y1:pts[j][1],x2:pts[j+1][0],y2:pts[j+1][1],layer});
+      if(pts.length) lset.add(layer);
+      continue;
+    }
+    if(p.code===0&&p.value==='CIRCLE'){
+      pi++; let cx=0,cy=0,r=0,layer='0';
+      while(pi<pairs.length&&pairs[pi].code!==0){
+        const{code,value}=pairs[pi];
+        if(code===8)  layer=value;
+        if(code===10) cx=parseFloat(value);
+        if(code===20) cy=parseFloat(value);
+        if(code===40) r=parseFloat(value);
+        pi++;
+      }
+      if(r>0&&isFinite(cx)&&isFinite(cy)){res.circles.push({cx,cy,r,layer});lset.add(layer);}
+      continue;
+    }
+    if(p.code===0&&p.value==='ARC'){
+      pi++; let cx=0,cy=0,r=0,sa=0,ea=360,layer='0';
+      while(pi<pairs.length&&pairs[pi].code!==0){
+        const{code,value}=pairs[pi];
+        if(code===8)  layer=value;
+        if(code===10) cx=parseFloat(value);
+        if(code===20) cy=parseFloat(value);
+        if(code===40) r=parseFloat(value);
+        if(code===50) sa=parseFloat(value);
+        if(code===51) ea=parseFloat(value);
+        pi++;
+      }
+      if(r>0&&isFinite(cx)&&isFinite(cy)){res.arcs.push({cx,cy,r,startAngle:sa,endAngle:ea,layer});lset.add(layer);}
+      continue;
+    }
+    pi++;
+  }
+  res.layers=Array.from(lset);
+  return res;
+}
+
+/* ── DEMO MODEL ───────────────────────────────────────────── */
+window.loadDemo=function(){
+  document.getElementById('drop-zone').style.display='none';
+  if(S.modelObj) scene.remove(S.modelObj);
+  const g=new THREE.Group();
+  const walls=[
+    [[-8,-6],[8,-6]],[[-8,6],[8,6]],[[-8,-6],[-8,6]],[[8,-6],[8,6]],
+    [[0,-6],[0,6]],[[-8,0],[0,0]],[[-4,-6],[-4,0]],[[3,-6],[3,6]]
+  ];
+  const mL=new THREE.LineBasicMaterial({color:0x3b82f6});
+  const mW=new THREE.MeshStandardMaterial({color:0x1e3a5f,transparent:true,opacity:0.55,side:THREE.DoubleSide});
+  walls.forEach(([a,b])=>{
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a[0],0,a[1]),new THREE.Vector3(b[0],0,b[1])]),mL));
+    const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.sqrt(dx*dx+dz*dz);
+    if(len<0.01)return;
+    const geo=new THREE.BoxGeometry(len,2.8,0.15);
+    const mesh=new THREE.Mesh(geo,mW); mesh.castShadow=true;
+    mesh.position.set((a[0]+b[0])/2,1.4,(a[1]+b[1])/2);
+    mesh.rotation.y=-Math.atan2(dz,dx);
+    g.add(mesh);
+  });
+  S.modelObj=g; scene.add(g);
+  S.fileName='demo_planta.dxf';
+  document.getElementById('title-bar').textContent='ARPlan Pro · demo_planta.dxf';
+  document.getElementById('sb-file').innerHTML='<i class="ti ti-file"></i> demo_planta.dxf';
+  updateLayerPanel([{name:'MUROS',color:'#3b82f6',visible:true},{name:'LOSA',color:'#10b981',visible:true}]);
+  document.getElementById('sb-layers').innerHTML='<i class="ti ti-layers-difference"></i> 2 capas';
+  zoomExtents(); showToast('Modelo demo cargado','ok');
+};
+
+/* ── CAMERA CONTROLS ──────────────────────────────────────── */
+window.zoomExtents=function(){
+  if(!S.modelObj){camera.position.set(0,15,20);controls.target.set(0,0,0);controls.update();return;}
+  const box=new THREE.Box3().setFromObject(S.modelObj);
+  const ctr=box.getCenter(new THREE.Vector3());
+  const sz=box.getSize(new THREE.Vector3());
+  const d=Math.max(sz.x,sz.y,sz.z,1);
+  controls.target.copy(ctr);
+  camera.position.copy(ctr.clone().add(new THREE.Vector3(0,d*1.2,d*1.5)));
+  camera.zoom=1; camera.updateProjectionMatrix(); controls.update();
+};
+window.zoomIn=function(){camera.zoom*=1.3;camera.updateProjectionMatrix();};
+window.zoomOut=function(){camera.zoom/=1.3;camera.updateProjectionMatrix();};
+window.setView=function(v){
+  if(!S.modelObj){return;}
+  const box=new THREE.Box3().setFromObject(S.modelObj);
+  const ctr=box.getCenter(new THREE.Vector3());
+  const sz=box.getSize(new THREE.Vector3()), d=Math.max(sz.x,sz.y,sz.z,1)*1.6;
+  controls.target.copy(ctr);
+  if(v==='top') camera.position.set(ctr.x,ctr.y+d*2,ctr.z+0.001);
+  else if(v==='iso') camera.position.set(ctr.x+d,ctr.y+d,ctr.z+d);
+  else if(v==='front') camera.position.set(ctr.x,ctr.y+d*0.5,ctr.z+d*2);
+  camera.zoom=1; camera.updateProjectionMatrix(); controls.update();
+  ['top','iso','front'].forEach(n=>document.getElementById('btn-view-'+n)?.classList.remove('active'));
+  document.getElementById('btn-view-'+v)?.classList.add('active');
+};
+window.toggleGrid=function(){S.gridVisible=!S.gridVisible;grid.visible=S.gridVisible;showToast('Grid: '+(S.gridVisible?'ON':'OFF'));};
+window.setModelOpacity=function(v){
+  if(!S.modelObj)return;
+  S.modelObj.traverse(o=>{if(o.material){o.material.transparent=true;o.material.opacity=v/100;}});
+};
+window.setMode=function(m){
+  S.currentMode=m;
+  ['3d','ar','gps'].forEach(n=>document.getElementById(`hbtn-${n}`)?.classList.remove('active'));
+  document.getElementById(`hbtn-${m}`)?.classList.add('active');
+  if(m==='gps') updateARGPSPos();
+};
+
+/* ── TOOL SYSTEM ──────────────────────────────────────────── */
+window.setTool=function(id){
+  S.activeTool=id;
+  document.querySelectorAll('.tool-btn,.tb-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tl-'+id)?.classList.add('active');
+  document.getElementById('tb-'+id)?.classList.add('active');
+  const cursors={select:'default',pan:'grab',pencil:'crosshair',highlight:'crosshair',
+    line:'crosshair',rect:'crosshair',circle:'crosshair',text:'text',
+    cloud:'crosshair',arrow:'crosshair',measure:'crosshair',gpspin:'crosshair',eraser:'cell',orbit:'grab'};
+  vpEl.style.cursor=cursors[id]||'crosshair';
+  // Toggle draw canvas pointer events + OrbitControls
+  syncDrawCanvasPointerEvents();
+  controls.enabled=!DRAW_TOOLS.has(id);
+  // Update panel
+  const isMeasure=id==='measure';
+  document.getElementById('tool-draw-panel').style.display=isMeasure?'none':'block';
+  document.getElementById('tool-measure-panel').style.display=isMeasure?'block':'none';
+  document.getElementById('sb-tool').innerHTML=`<i class="ti ti-pencil"></i> ${id}`;
+  window.closeAllMenus();
+};
+
+/* ── DRAW PROPS UI ────────────────────────────────────────── */
+const COLORS=['#ef4444','#f59e0b','#22c55e','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8'];
+const cpEl=document.getElementById('color-palette');
+COLORS.forEach(c=>{
+  const sw=document.createElement('div');
+  sw.className='color-sw'+(c===S.activeColor?' active':'');
+  sw.style.background=c;
+  sw.addEventListener('pointerdown',()=>{
+    S.activeColor=c;
+    document.querySelectorAll('.color-sw').forEach(s=>s.classList.remove('active'));
+    sw.classList.add('active');
+  });
+  cpEl.appendChild(sw);
+});
+const ssEl=document.getElementById('stroke-sizes');
+[1,2,4,8].forEach(w=>{
+  const b=document.createElement('div');
+  b.className='stroke-opt'+(w===S.strokeWidth?' active':'');
+  b.textContent=w+'px';
+  b.addEventListener('pointerdown',()=>{
+    S.strokeWidth=w;
+    document.querySelectorAll('.stroke-opt').forEach(s=>s.classList.remove('active'));
+    b.classList.add('active');
+  });
+  ssEl.appendChild(b);
+});
+document.getElementById('stylus-only').addEventListener('change',e=>S.stylusOnly=e.target.checked);
+document.getElementById('pressure-mode').addEventListener('change',e=>S.pressureMode=e.target.checked);
+
+/* ── UNDO / REDO ──────────────────────────────────────────── */
+window.undoStroke=function(){
+  if(!S.strokes.length){showToast('Nada que deshacer');return;}
+  S.undoStack.push(JSON.stringify(S.strokes));
+  S.strokes.pop(); redrawAll(); autoSave();
+};
+window.redoStroke=function(){
+  if(!S.undoStack.length)return;
+  S.strokes=JSON.parse(S.undoStack.pop());
+  redrawAll(); autoSave();
+};
+window.clearDrawing=function(){
+  if(!confirm('¿Borrar todos los trazos?'))return;
+  S.undoStack.push(JSON.stringify(S.strokes));
+  S.strokes=[]; redrawAll(); autoSave();
+};
+
+/* ── GPS ──────────────────────────────────────────────────── */
+function showGPSBanner(msg){
+  const b=document.getElementById('gps-banner');
+  b.textContent=msg; b.style.display='block';
+  setTimeout(()=>b.style.display='none',5000);
+}
+
+window.toggleGPS=function(){
+  if(S.gpsActive){
+    if(S.gpsWatch!==null) navigator.geolocation.clearWatch(S.gpsWatch);
+    S.gpsActive=false; S.gpsWatch=null; S.gpsPos=null;
+    document.getElementById('gps-dot').className='gps-dot';
+    document.getElementById('hud-gps-text').textContent='GPS desactivado';
+    document.getElementById('hud-latlon').style.display='none';
+    document.getElementById('sb-gps').innerHTML='<i class="ti ti-current-location"></i> GPS —';
+    document.getElementById('btn-gps-toggle').innerHTML='<i class="ti ti-current-location"></i> Activar GPS';
+    document.getElementById('tb-gps').classList.remove('active');
+    document.getElementById('hud-bc').style.display='none';
+    showToast('GPS desactivado');
+    return;
+  }
+  if(!navigator.geolocation){showToast('GPS no soportado en este dispositivo','err');return;}
+  // Request permission explicitly on iOS (Brave handles this via standard API)
+  showToast('Solicitando permiso GPS…');
+  document.getElementById('gps-dot').className='gps-dot';
+  document.getElementById('hud-gps-text').textContent='Conectando…';
+
+  const onSuccess=pos=>{
+    S.gpsActive=true; S.gpsPos=pos.coords;
+    const lat=pos.coords.latitude.toFixed(6);
+    const lon=pos.coords.longitude.toFixed(6);
+    const acc=Math.round(pos.coords.accuracy);
+    const alt=pos.coords.altitude!=null?pos.coords.altitude.toFixed(0)+'m':'—';
+    document.getElementById('gps-dot').className='gps-dot active';
+    document.getElementById('hud-gps-text').textContent=`GPS ±${acc}m`;
+    document.getElementById('hud-latlon').style.display='flex';
+    document.getElementById('hud-latlon').textContent=`${lat} / ${lon}`;
+    document.getElementById('gps-lat').textContent=lat;
+    document.getElementById('gps-lon').textContent=lon;
+    document.getElementById('gps-alt').textContent=alt;
+    const accEl=document.getElementById('gps-acc');
+    accEl.textContent=`±${acc}m`; accEl.className='gps-val '+(acc<15?'gps-good':'gps-bad');
+    document.getElementById('sb-gps').innerHTML=`<i class="ti ti-current-location"></i> ±${acc}m`;
+    document.getElementById('btn-gps-toggle').innerHTML='<i class="ti ti-current-location"></i> Desactivar GPS';
+    document.getElementById('tb-gps').classList.add('active');
+    if(S.projectLat!==null){
+      const d=haversine(pos.coords.latitude,pos.coords.longitude,S.projectLat,S.projectLon);
+      const ds=d<1000?Math.round(d)+'m':(d/1000).toFixed(1)+'km';
+      document.getElementById('gps-dist-proj').textContent=ds;
+      document.getElementById('hud-dist').querySelector('span').textContent=ds+' al proyecto';
+      document.getElementById('hud-bc').style.display='block';
+    }
+  };
+
+  const onError=err=>{
+    let msg='Error GPS';
+    scheduleGPSRetry();
+    if(err.code===1) msg='Permiso GPS denegado. Ve a Configuración → Navegador → Permisos de ubicación.';
+    else if(err.code===2) msg='Señal GPS no disponible (interior o sin señal).';
+    else if(err.code===3) msg='Tiempo de espera GPS agotado. Intenta en exteriores.';
+    showToast(msg,'err'); showGPSBanner(msg);
+    document.getElementById('gps-dot').className='gps-dot';
+    document.getElementById('hud-gps-text').textContent='GPS error';
+  };
+
+  // Use getCurrentPosition first (faster) then watchPosition
+  navigator.geolocation.getCurrentPosition(pos=>{
+    onSuccess(pos);
+    // Then start watching
+    S.gpsWatch=navigator.geolocation.watchPosition(onSuccess,onError,
+      {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
+  },onError,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+};
+
+window.setProjectOrigin=function(){
+  if(!S.gpsPos){showToast('Activa el GPS primero','err');return;}
+  S.projectLat=S.gpsPos.latitude; S.projectLon=S.gpsPos.longitude;
+  document.getElementById('proj-lat-in').value=S.projectLat.toFixed(6);
+  document.getElementById('proj-lon-in').value=S.projectLon.toFixed(6);
+  showToast('Origen fijado en posición actual','ok');
+};
+window.applyProjectCoords=function(){
+  const lat=parseFloat(document.getElementById('proj-lat-in').value);
+  const lon=parseFloat(document.getElementById('proj-lon-in').value);
+  if(isNaN(lat)||isNaN(lon)){showToast('Coordenadas inválidas','err');return;}
+  S.projectLat=lat; S.projectLon=lon;
+  showToast(`Proyecto: ${lat.toFixed(4)}, ${lon.toFixed(4)}`,'ok');
+};
+function haversine(a,b,c,d){
+  const R=6371000,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180;
+  const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+// Compass — works on Chrome Android (deviceorientationabsolute) and
+// Brave/iOS (webkitCompassHeading on deviceorientation)
+function startCompass(){
+  const handler=e=>{
+    let h=null;
+    if(e.webkitCompassHeading!=null) h=e.webkitCompassHeading; // iOS/Brave
+    else if(e.alpha!=null) h=(360-e.alpha)%360;                 // Android absolute
+    if(h===null)return;
+    S.heading=Math.round(h);
+    document.getElementById('hud-heading').textContent=`N ${S.heading}°`;
+    document.getElementById('gps-hdg').textContent=S.heading+'°';
+  };
+  // Try absolute first (most accurate on Android)
+  window.addEventListener('deviceorientationabsolute',handler,true);
+  // Fallback for iOS/Brave (non-absolute)
+  window.addEventListener('deviceorientation',handler,true);
+}
+
+if(typeof DeviceOrientationEvent!=='undefined'){
+  // iOS 13+ requires permission
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    // Will be triggered when user activates GPS button
+    document.getElementById('btn-gps-toggle').addEventListener('pointerdown',function reqPerm(){
+      DeviceOrientationEvent.requestPermission().then(p=>{
+        if(p==='granted') startCompass();
+      }).catch(()=>startCompass()); // try anyway
+      document.getElementById('btn-gps-toggle').removeEventListener('pointerdown',reqPerm);
+    },{once:true});
+  } else {
+    startCompass();
+  }
+}
+
+window.openGPSModal=function(){
+  showModal(`<h3>Coordenadas del proyecto</h3>
+    <label>Latitud</label><input id="ml-lat" value="${S.projectLat||''}">
+    <label>Longitud</label><input id="ml-lon" value="${S.projectLon||''}">
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeModal()">Cancelar</button>
+      <button class="btn-pri" onclick="applyGPSModal()">Aplicar</button>
+    </div>`);
+};
+window.applyGPSModal=function(){
+  const lat=parseFloat(document.getElementById('ml-lat').value);
+  const lon=parseFloat(document.getElementById('ml-lon').value);
+  if(!isNaN(lat)&&!isNaN(lon)){S.projectLat=lat;S.projectLon=lon;}
+  closeModal(); showToast('Coordenadas aplicadas','ok');
+};
+
+/* ── AR ───────────────────────────────────────────────────── */
+window.startARSurface=async function(){
+  if(!navigator.xr){showToast('WebXR no disponible — usa Chrome en Android','err');return;}
+  const ok=await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
+  if(!ok){
+    if(IS_IOS && S.modelBlobURL){
+      showModelViewerAR(S.modelBlobURL);
+    } else if(IS_IOS){
+      showToast('iOS: carga un modelo GLB primero para usar AR Quick Look','err');
+    } else {
+      showToast('AR no soportada — requiere Chrome + ARCore en Android','err');
+    }
+    return;
+  }
+  const btn=ARButton.createButton(renderer,{
+    requiredFeatures:['hit-testing'],
+    optionalFeatures:['dom-overlay','light-estimation'],
+    domOverlay:{root:document.getElementById('hud')}
+  });
+  document.body.appendChild(btn); btn.style.display='none';
+  btn.click(); setTimeout(()=>btn.remove(),1000);
+  setMode('ar');
+};
+
+window.startARGPS=function(){
+  if(!S.gpsActive){showToast('Activa el GPS primero','err');toggleGPS();return;}
+  if(!S.modelObj){showToast('Carga un modelo primero','err');return;}
+  setMode('gps'); showToast('AR GPS activo','ok');
+  updateARGPSPos();
+};
+
+function updateARGPSPos(){
+  if(S.currentMode!=='gps'||!S.modelObj||!S.gpsPos||S.projectLat===null)return;
+  const R=6371000;
+  const dLat=(S.projectLat-S.gpsPos.latitude)*Math.PI/180;
+  const dLon=(S.projectLon-S.gpsPos.longitude)*Math.PI/180;
+  const x=dLon*Math.cos(S.gpsPos.latitude*Math.PI/180)*R;
+  const z=dLat*R;
+  S.modelObj.position.set(x,0,z);
+  if(S.heading!==null) S.modelObj.rotation.y=S.heading*Math.PI/180;
+  setTimeout(updateARGPSPos,2000);
+}
+
+window.checkARSupport=async function(){
+  const xr=navigator.xr;
+  let msg='<h3>Compatibilidad del dispositivo</h3>';
+  if(!xr) msg+='<p style="color:var(--danger)">✗ WebXR no disponible (usa Chrome 81+ en Android)</p>';
+  else{
+    const ar=await xr.isSessionSupported('immersive-ar').catch(()=>false);
+    msg+=ar?'<p style="color:var(--success)">✓ AR Superficie soportada</p>'
+           :'<p style="color:var(--warning)">⚠ AR Superficie no soportada (requiere ARCore)</p>';
+  }
+  msg+=navigator.geolocation?'<p style="color:var(--success)">✓ GPS disponible</p>':'<p style="color:var(--danger)">✗ GPS no disponible</p>';
+  msg+=window.DeviceOrientationEvent?'<p style="color:var(--success)">✓ Brújula/giroscopio disponible</p>':'<p style="color:var(--warning)">⚠ Sin brújula detectada</p>';
+  msg+=`<p style="font-size:10px;color:var(--text-tert);margin-top:8px">${navigator.userAgent.substring(0,100)}</p>`;
+  msg+='<div class="modal-btns"><button class="btn-sec" onclick="closeModal()">Cerrar</button></div>';
+  showModal(msg);
+};
+
+/* ── CAPTURE ──────────────────────────────────────────────── */
+window.doScreenshot=async function(){
+  renderer.render(scene,camera);
+  const merged=document.createElement('canvas');
+  merged.width=canvas3.width; merged.height=canvas3.height;
+  const mc=merged.getContext('2d');
+  const img1=new Image(); img1.src=canvas3.toDataURL('image/png');
+  await new Promise(r=>img1.onload=r);
+  mc.drawImage(img1,0,0);
+  mc.drawImage(drawEl,0,0,merged.width,merged.height);
+  mc.font=`${Math.round(merged.width*0.014)}px monospace`;
+  mc.fillStyle='rgba(255,255,255,0.75)';
+  mc.fillText(`ARPlan Pro | ${new Date().toLocaleString()} | ${S.fileName||'Sin título'}`,12,merged.height-12);
+  const a=document.createElement('a');
+  a.download=`arplan_${Date.now()}.png`; a.href=merged.toDataURL('image/png'); a.click();
+  showToast('Pantallazo guardado','ok');
+};
+window.doCameraPhoto=async function(){
+  if(!navigator.mediaDevices?.getUserMedia){showToast('Cámara no disponible','err');return;}
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920}}});
+    const v=document.createElement('video'); v.srcObject=stream; v.playsInline=true;
+    await v.play();
+    const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+    c.getContext('2d').drawImage(v,0,0);
+    stream.getTracks().forEach(t=>t.stop());
+    const a=document.createElement('a'); a.download=`foto_${Date.now()}.jpg`;
+    a.href=c.toDataURL('image/jpeg',0.92); a.click();
+    showToast('Foto guardada','ok');
+  }catch(e){showToast('Error cámara: '+e.message,'err');}
+};
+window.toggleScreenRecord=function(){
+  if(!isScreenRecordSupported()){
+    showToast('Grabación de pantalla no soportada en este dispositivo/navegador','err');
+    return;
+  }
+  if(S.recording){
+    S.mediaRecorder?.stop(); S.recording=false;
+    document.getElementById('tb-rec').style.color='';
+    showToast('Grabación guardada','ok');
+  } else {
+    try{
+      const stream=canvas3.captureStream(30);
+      const mimeType=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';
+      S.mediaRecorder=new MediaRecorder(stream,{mimeType});
+      S.recordedChunks=[];
+      S.mediaRecorder.ondataavailable=e=>S.recordedChunks.push(e.data);
+      S.mediaRecorder.onstop=()=>{
+        const blob=new Blob(S.recordedChunks,{type:'video/webm'});
+        const a=document.createElement('a'); a.download=`grabacion_${Date.now()}.webm`;
+        a.href=URL.createObjectURL(blob); a.click();
+      };
+      S.mediaRecorder.start(); S.recording=true;
+      document.getElementById('tb-rec').style.color='var(--danger)';
+      showToast('Grabando… toca el botón para detener');
+    }catch(e){showToast('Grabación no disponible: '+e.message,'err');}
+  }
+};
+
+/* ── OBSERVATIONS ─────────────────────────────────────────── */
+window.addObservation=function(){
+  showModal(`<h3>Nueva observación</h3>
+    <label>Título</label><input id="obs-t" placeholder="Ej: Fisura en muro norte">
+    <label>Descripción</label><input id="obs-d" placeholder="Detalle…">
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeModal()">Cancelar</button>
+      <button class="btn-pri" onclick="saveObservation()">Guardar</button>
+    </div>`);
+};
+window.saveObservation=function(){
+  const id='OBS-'+String(S.observations.length+1).padStart(2,'0');
+  S.observations.push({id,
+    title:document.getElementById('obs-t')?.value||'',
+    desc:document.getElementById('obs-d')?.value||'',
+    gps:S.gpsPos?{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude}:null,
+    ts:new Date().toISOString()});
+  localStorage.setItem('arplan_obs',JSON.stringify(S.observations));
+  renderObsList(); closeModal(); showToast(id+' guardada','ok');
+};
+function renderObsList(){
+  const el=document.getElementById('obs-list');
+  if(!S.observations.length){el.innerHTML='<p style="font-size:11px;color:var(--text-tert)">Sin observaciones</p>';return;}
+  el.innerHTML=S.observations.map(o=>`
+    <div class="obs-item"><div class="obs-badge">${o.id}</div>
+    <div class="obs-text">${o.title||'—'}</div>
+    ${o.desc?`<div class="obs-text">${o.desc}</div>`:''}
+    ${o.gps?`<div class="obs-time">GPS: ${o.gps.lat.toFixed(4)}, ${o.gps.lon.toFixed(4)}</div>`:''}
+    <div class="obs-time">${new Date(o.ts).toLocaleString()}</div></div>`).join('');
+}
+renderObsList();
+window.exportObsPDF=function(){
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Informe Campo</title>
+    <style>body{font-family:sans-serif;max-width:800px;margin:30px auto;font-size:13px}
+    h1{font-size:18px;border-bottom:2px solid #3b82f6;padding-bottom:8px}
+    .obs{border:1px solid #ccc;padding:12px;margin:10px 0;border-radius:4px;border-left:4px solid #f59e0b}</style>
+    </head><body><h1>Informe de Observaciones — ARPlan Pro</h1>
+    <p><b>Proyecto:</b> ${S.fileName||'—'} | <b>Fecha:</b> ${new Date().toLocaleString()}</p>
+    ${S.observations.map(o=>`<div class="obs"><b>${o.id}: ${o.title||''}</b><p>${o.desc||''}</p>
+    ${o.gps?`<small>GPS: ${o.gps.lat.toFixed(6)}, ${o.gps.lon.toFixed(6)}</small><br>`:''}
+    <small>${new Date(o.ts).toLocaleString()}</small></div>`).join('')}
+    </body></html>`);
+  win.document.close(); win.print();
+};
+window.exportKML=function(){
+  const pins=S.strokes.filter(s=>s.tool==='gpspin'&&s.label?.includes(','));
+  if(!pins.length){showToast('No hay pines GPS','err');return;}
+  const pm=pins.map((p,i)=>{const[lat,lon]=p.label.split(',');
+    return`<Placemark><name>PIN-${i+1}</name><Point><coordinates>${lon},${lat},0</coordinates></Point></Placemark>`;}).join('');
+  const kml=`<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARPlan</name>${pm}</Document></kml>`;
+  const a=document.createElement('a'); a.download='arplan_waypoints.kml';
+  a.href='data:application/vnd.google-earth.kml+xml,'+encodeURIComponent(kml); a.click();
+  showToast(pins.length+' waypoints exportados','ok');
+};
+
+/* ── LAYERS ───────────────────────────────────────────────── */
+function updateLayerPanel(layers){
+  S.layers=layers;
+  document.getElementById('layers-list').innerHTML=layers.map(l=>`
+    <div class="layer-item">
+      <div class="layer-dot" style="background:${l.color}"></div>
+      <span class="layer-name">${l.name}</span>
+      <button class="layer-eye" onclick="toggleLayer('${l.name}')" aria-label="${l.name}">
+        <i class="ti ${l.visible?'ti-eye':'ti-eye-off'}"></i></button>
+    </div>`).join('');
+}
+window.toggleLayer=function(name){
+  const l=S.layers.find(x=>x.name===name); if(l) l.visible=!l.visible;
+  updateLayerPanel(S.layers);
+};
+
+/* ── SAVE ─────────────────────────────────────────────────── */
+window.saveProject=function(){autoSave();showToast('Guardado','ok');document.getElementById('sb-save').innerHTML='<i class="ti ti-circle-check"></i> Guardado';};
+function autoSave(){localStorage.setItem('arplan_strokes',JSON.stringify(S.strokes));localStorage.setItem('arplan_obs',JSON.stringify(S.observations));}
+
+/* ── KEYBOARD ─────────────────────────────────────────────── */
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  const k=e.key.toLowerCase();
+  if(e.ctrlKey||e.metaKey){
+    if(k==='z'){e.preventDefault();undoStroke();}
+    if(k==='y'){e.preventDefault();redoStroke();}
+    if(k==='s'){e.preventDefault();saveProject();}
+    if(k==='o'){e.preventDefault();triggerFileOpen();}
+    return;
+  }
+  const tk={p:'pencil',h:'highlight',l:'line',r:'rect',c:'circle',t:'text',m:'measure',e:'eraser',s:'select'};
+  if(tk[k]) setTool(tk[k]);
+  if(k==='g') toggleGrid();
+  if(k==='+'||k==='=') zoomIn();
+  if(k==='-') zoomOut();
+  if(k==='escape'){window.closeAllMenus();closeModal();}
+  if(k==='delete'||k==='backspace') undoStroke();
+  if(k==='f') zoomExtents();
+});
+
+/* ── WHEEL ZOOM ───────────────────────────────────────────── */
+// Only listen on the THREE canvas (or viewport when not in draw mode)
+canvas3.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const factor=e.deltaY>0?0.85:1.18;
+  camera.zoom*=factor; camera.updateProjectionMatrix();
+},{passive:false});
+// Also allow wheel on draw canvas when not drawing
+drawEl.addEventListener('wheel',e=>{
+  if(DRAW_TOOLS.has(S.activeTool))return;
+  e.preventDefault();
+  const factor=e.deltaY>0?0.85:1.18;
+  camera.zoom*=factor; camera.updateProjectionMatrix();
+},{passive:false});
+
+
+/* ============================================================
+   PWA — Service Worker registration
+============================================================ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => {
+        console.log('[SW] registered, scope:', reg.scope);
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              showToast('Nueva versión disponible — recarga para actualizar');
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('[SW] registration failed:', err));
+  });
+}
+
+/* ============================================================
+   HTTPS check
+============================================================ */
+(function checkHTTPS() {
+  const proto = location.protocol;
+  const isLocal = location.hostname === 'localhost' ||
+                  location.hostname === '127.0.0.1' ||
+                  location.hostname.endsWith('.local');
+  if (proto !== 'https:' && !isLocal) {
+    const banner = document.createElement('div');
+    banner.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:9000;
+      background:#92400e;color:#fef3c7;padding:10px 16px;font-size:13px;
+      text-align:center;font-family:inherit`;
+    banner.innerHTML = `<i class="ti ti-alert-triangle"></i>
+      Esta página no usa HTTPS. El GPS, la cámara y el AR requieren HTTPS para funcionar.
+      <button onclick="this.parentElement.remove()" style="margin-left:12px;background:transparent;
+      color:#fef3c7;border:.5px solid #fef3c7;border-radius:12px;padding:3px 10px;
+      cursor:pointer;font-size:12px">Entendido</button>`;
+    document.body.prepend(banner);
+  }
+})();
+
+/* ============================================================
+   iOS detection helpers
+============================================================ */
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+/* ============================================================
+   IndexedDB — guardar y recuperar modelos
+============================================================ */
+const DB_NAME    = 'arplan-db';
+const DB_VERSION = 1;
+const DB_STORE   = 'models';
+let _db = null;
+
+function openDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(DB_STORE, { keyPath: 'name' });
+    };
+    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function dbSaveModel(name, arrayBuffer) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(DB_STORE, 'readwrite');
+      const req = tx.objectStore(DB_STORE).put({
+        name, data: arrayBuffer, savedAt: new Date().toISOString()
+      });
+      req.onsuccess = () => resolve(true);
+      req.onerror   = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn('[DB] save failed:', e);
+    return false;
+  }
+}
+
+async function dbLoadModel(name) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(name);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror   = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn('[DB] load failed:', e);
+    return null;
+  }
+}
+
+async function dbListModels() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).getAllKeys();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror   = () => reject(req.error);
+    });
+  } catch (e) { return []; }
+}
+
+/* ============================================================
+   DXF Web Worker integration
+============================================================ */
+let dxfWorker = null;
+
+function getDXFWorker() {
+  if (dxfWorker) return dxfWorker;
+  /* Crear worker desde archivo separado */
+  try {
+    dxfWorker = new Worker('./workers/dxf-worker.js');
+  } catch (e) {
+    console.warn('[Worker] failed to load from file, using inline fallback');
+    dxfWorker = null;
+  }
+  return dxfWorker;
+}
+
+function parseDXFInWorker(text) {
+  return new Promise((resolve, reject) => {
+    const worker = getDXFWorker();
+    if (!worker) {
+      /* Fallback: parsear en el hilo principal */
+      try { resolve(parseDXFFallback(text)); }
+      catch (e) { reject(e); }
+      return;
+    }
+    worker.onmessage = e => {
+      const { type, data, message, pct } = e.data;
+      if (type === 'PROGRESS') { setProgress(20 + Math.round(pct * 0.6)); return; }
+      if (type === 'RESULT')   { resolve(data); return; }
+      if (type === 'ERROR')    { reject(new Error(message)); return; }
+    };
+    worker.onerror = err => reject(new Error(err.message || 'Worker error'));
+    worker.postMessage({ type: 'PARSE', text });
+  });
+}
+
+/* Fallback DXF parser (mismo que antes, por si el Worker falla) */
+function parseDXFFallback(text) {
+  const raw = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  const pairs = [];
+  for (let i = 0; i+1 < raw.length; i += 2) {
+    const code = parseInt(raw[i].trim(), 10);
+    const value = raw[i+1].trim();
+    if (!isNaN(code)) pairs.push([code, value]);
+  }
+  const res = { segments:[], circles:[], arcs:[], texts:[], points:[], layers:[], layerColors:{}, units:{code:0,factor:1,label:'desconocido'} };
+  const lset = new Set();
+  let pi = 0, found = false;
+  while (pi < pairs.length) {
+    if (pairs[pi][0]===0 && pairs[pi][1]==='SECTION') {
+      if (pairs[pi+1]?.[0]===2 && pairs[pi+1]?.[1]==='ENTITIES') { found=true; pi+=2; break; }
+    }
+    pi++;
+  }
+  if (!found) pi = 0;
+  while (pi < pairs.length) {
+    const [code, value] = pairs[pi];
+    if (code===0 && value==='ENDSEC') break;
+    if (code===0 && value==='LINE') {
+      pi++; let x1=0,y1=0,x2=0,y2=0,layer='0';
+      while (pi < pairs.length && pairs[pi][0] !== 0) {
+        const [c,v] = pairs[pi];
+        if (c===8) layer=v; if (c===10) x1=parseFloat(v); if (c===20) y1=parseFloat(v);
+        if (c===11) x2=parseFloat(v); if (c===21) y2=parseFloat(v);
+        pi++;
+      }
+      if (isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)) {
+        res.segments.push({x1,y1,x2,y2,layer}); lset.add(layer); }
+      continue;
+    }
+    if (code===0 && (value==='LWPOLYLINE'||value==='POLYLINE')) {
+      pi++; const pts=[]; let layer='0', closed=false, lx=null, ly=null;
+      while (pi < pairs.length && pairs[pi][0] !== 0) {
+        const [c,v] = pairs[pi];
+        if (c===8) layer=v; if (c===70 && (parseInt(v)&1)) closed=true;
+        if (c===10) lx=parseFloat(v);
+        if (c===20) { ly=parseFloat(v); if (lx!==null&&isFinite(lx)&&isFinite(ly)) { pts.push([lx,ly]); lx=null; } }
+        pi++;
+      }
+      if (closed && pts.length) pts.push(pts[0]);
+      for (let j=0;j<pts.length-1;j++) res.segments.push({x1:pts[j][0],y1:pts[j][1],x2:pts[j+1][0],y2:pts[j+1][1],layer});
+      if (pts.length) lset.add(layer);
+      continue;
+    }
+    if (code===0 && value==='CIRCLE') {
+      pi++; let cx=0,cy=0,r=0,layer='0';
+      while (pi < pairs.length && pairs[pi][0] !== 0) {
+        const [c,v] = pairs[pi];
+        if (c===8) layer=v; if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v); if (c===40) r=parseFloat(v);
+        pi++;
+      }
+      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.circles.push({cx,cy,r,layer}); lset.add(layer); }
+      continue;
+    }
+    if (code===0 && value==='ARC') {
+      pi++; let cx=0,cy=0,r=0,sa=0,ea=360,layer='0';
+      while (pi < pairs.length && pairs[pi][0] !== 0) {
+        const [c,v] = pairs[pi];
+        if (c===8) layer=v; if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v);
+        if (c===40) r=parseFloat(v); if (c===50) sa=parseFloat(v); if (c===51) ea=parseFloat(v);
+        pi++;
+      }
+      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.arcs.push({cx,cy,r,startAngle:sa,endAngle:ea,layer}); lset.add(layer); }
+      continue;
+    }
+    pi++;
+  }
+  res.layers = Array.from(lset);
+  return res;
+}
+
+/* ============================================================
+   model-viewer iOS AR fallback
+============================================================ */
+function showModelViewerAR(blobURL) {
+  const mv = document.getElementById('mv-viewer');
+  if (!mv) return;
+  mv.setAttribute('src', blobURL);
+  document.getElementById('mv-container').style.display = 'block';
+  showToast('AR Quick Look listo — toca "Ver en AR"', 'ok');
+}
+
+/* ============================================================
+   Tutorial first-run
+============================================================ */
+const TUTORIAL_STEPS = [
+  { icon:'ti-upload',           title:'Carga tu plano',
+    text:'Arrastra un archivo GLB, GLTF o DXF al visor, o usa el botón "Seleccionar archivo".' },
+  { icon:'ti-hand-move',        title:'Navega el modelo',
+    text:'Un dedo para rotar. Dos dedos para zoom y pan. Rueda del mouse en escritorio.' },
+  { icon:'ti-pencil',           title:'Dibuja y anota',
+    text:'Usa la paleta izquierda para lápiz, resaltador, líneas y texto. El lápiz Apple Pencil o S Pen funciona con sensibilidad a presión.' },
+  { icon:'ti-current-location', title:'Activa el GPS',
+    text:'Toca el botón GPS en la barra. La app mostrará tu posición sobre el plano y calculará distancia al proyecto.' },
+  { icon:'ti-augmented-reality',title:'Realidad Aumentada',
+    text:'Android Chrome: usa "AR Superficie" para colocar el plano en el suelo real. iOS: usa "AR GPS" o el botón de model-viewer.' },
+  { icon:'ti-device-floppy',    title:'Guarda tu trabajo',
+    text:'Ctrl+S guarda trazos y observaciones. El modelo 3D se guarda automáticamente en el dispositivo para la próxima sesión.' },
+];
+
+let tutStep = 0;
+
+function showTutorial() {
+  if (localStorage.getItem('arplan_tutorial_done')) return;
+  tutStep = 0;
+  renderTutStep();
+  document.getElementById('tutorial-overlay').style.display = 'flex';
+}
+
+function renderTutStep() {
+  const s = TUTORIAL_STEPS[tutStep];
+  const total = TUTORIAL_STEPS.length;
+  const dots = TUTORIAL_STEPS.map((_,i) =>
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+     background:${i===tutStep?'#3b82f6':'rgba(255,255,255,.2)'};margin:0 3px"></span>`
+  ).join('');
+
+  document.getElementById('tutorial-steps').innerHTML = `
+    <div style="text-align:center;padding:20px;background:rgba(255,255,255,.05);
+      border-radius:12px;border:.5px solid rgba(255,255,255,.1)">
+      <i class="ti ${s.icon}" style="font-size:32px;color:#3b82f6;margin-bottom:12px;display:block"></i>
+      <div style="font-size:15px;font-weight:500;color:#f9fafb;margin-bottom:8px">${s.title}</div>
+      <div style="font-size:13px;color:#9ca3af;line-height:1.6">${s.text}</div>
+      <div style="margin-top:16px">${dots}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:6px">${tutStep+1} / ${total}</div>
+    </div>`;
+
+  document.getElementById('tut-prev').style.opacity = tutStep === 0 ? '0.3' : '1';
+  document.getElementById('tut-next').textContent =
+    tutStep === total - 1 ? 'Empezar' : 'Siguiente';
+}
+
+window.tutNav = function(dir) {
+  const total = TUTORIAL_STEPS.length;
+  tutStep = Math.max(0, Math.min(total - 1, tutStep + dir));
+  if (dir > 0 && tutStep === total - 1 &&
+      document.getElementById('tut-next').textContent === 'Empezar') {
+    closeTutorial(); return;
+  }
+  renderTutStep();
+};
+
+window.closeTutorial = function() {
+  localStorage.setItem('arplan_tutorial_done', '1');
+  document.getElementById('tutorial-overlay').style.display = 'none';
+};
+
+/* ============================================================
+   Compass dedicated button (iOS permission)
+============================================================ */
+window.requestCompassPermission = function() {
+  if (typeof DeviceOrientationEvent === 'undefined') {
+    showToast('Brújula no disponible en este dispositivo', 'err'); return;
+  }
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(p => {
+        if (p === 'granted') {
+          startCompass();
+          showToast('Brújula activada', 'ok');
+        } else {
+          showToast('Permiso de brújula denegado. Ve a Ajustes → Safari → Movimiento y orientación', 'err');
+        }
+      })
+      .catch(() => { startCompass(); });
+  } else {
+    startCompass();
+    showToast('Brújula activada', 'ok');
+  }
+};
+
+/* ============================================================
+   Two-finger zoom while in draw mode
+============================================================ */
+(function setupTwoFingerZoom() {
+  let lastPinchDist = null;
+  let activeTouches = new Map();
+
+  vpEl.addEventListener('touchstart', e => {
+    for (const t of e.changedTouches) {
+      activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+    if (activeTouches.size === 2) {
+      const pts = Array.from(activeTouches.values());
+      lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    }
+  }, { passive: true });
+
+  vpEl.addEventListener('touchmove', e => {
+    /* Only intercept when 2 fingers are active during a draw tool */
+    if (e.touches.length < 2 || !DRAW_TOOLS.has(S.activeTool)) return;
+    for (const t of e.changedTouches) {
+      activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+    const pts = Array.from(activeTouches.values()).slice(0, 2);
+    const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    if (lastPinchDist && Math.abs(dist - lastPinchDist) > 2) {
+      const factor = dist / lastPinchDist;
+      camera.zoom = Math.max(0.1, Math.min(50, camera.zoom * factor));
+      camera.updateProjectionMatrix();
+    }
+    lastPinchDist = dist;
+  }, { passive: true });
+
+  vpEl.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) activeTouches.delete(t.identifier);
+    if (activeTouches.size < 2) lastPinchDist = null;
+  }, { passive: true });
+})();
+
+/* ============================================================
+   Text tool — modal instead of floating textarea
+============================================================ */
+function openTextModal(pos) {
+  showModal(`<h3>Agregar texto</h3>
+    <label>Texto</label>
+    <textarea id="text-modal-input" rows="3"
+      style="width:100%;background:#0f172a;border:.5px solid rgba(255,255,255,.14);
+      border-radius:4px;color:#f9fafb;font-size:14px;padding:8px;resize:vertical;
+      font-family:sans-serif"
+      placeholder="Escribe aquí…"></textarea>
+    <label>Tamaño</label>
+    <input type="range" min="10" max="40" value="14" id="text-modal-size" style="width:100%">
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeModal()">Cancelar</button>
+      <button class="btn-pri" onclick="confirmTextModal(${pos.x},${pos.y})">Colocar</button>
+    </div>`);
+  setTimeout(() => document.getElementById('text-modal-input')?.focus(), 100);
+}
+
+window.confirmTextModal = function(x, y) {
+  const txt = document.getElementById('text-modal-input')?.value?.trim();
+  const sz  = parseInt(document.getElementById('text-modal-size')?.value || '14', 10);
+  if (txt) {
+    pushStroke({ tool:'text', color:S.activeColor, op:1,
+                 text:txt, pos:{x,y}, fontSize:sz });
+  }
+  closeModal();
+};
+
+/* ============================================================
+   GPS retry with exponential backoff
+============================================================ */
+let gpsRetryTimer  = null;
+let gpsRetryCount  = 0;
+const GPS_MAX_RETRY = 4;
+
+function scheduleGPSRetry() {
+  if (gpsRetryCount >= GPS_MAX_RETRY) {
+    showToast('GPS: no se pudo obtener señal después de varios intentos', 'err');
+    document.getElementById('hud-gps-text').textContent = 'GPS sin señal';
+    gpsRetryCount = 0;
+    return;
+  }
+  const delay = Math.pow(2, gpsRetryCount) * 3000; // 3s, 6s, 12s, 24s
+  gpsRetryCount++;
+  document.getElementById('hud-gps-text').textContent =
+    'GPS reintentando (' + gpsRetryCount + '/' + GPS_MAX_RETRY + ')…';
+  gpsRetryTimer = setTimeout(() => {
+    if (!S.gpsActive) return;
+    navigator.geolocation.getCurrentPosition(
+      pos => { gpsRetryCount = 0; /* onSuccess ya maneja el update */ },
+      err => scheduleGPSRetry(),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }, delay);
+}
+
+/* ============================================================
+   captureStream detection
+============================================================ */
+function isScreenRecordSupported() {
+  return typeof canvas3.captureStream === 'function';
+}
+
+/* ============================================================
+   Scale calibration dialog
+============================================================ */
+window.openScaleCalibration = function() {
+  showModal(`<h3>Calibrar escala de medición</h3>
+    <p style="font-size:12px;color:#9ca3af;margin-bottom:8px">
+      Dibuja una línea sobre una distancia conocida del plano,
+      luego ingresa esa distancia real para calibrar la escala.
+    </p>
+    <label>Distancia real conocida (metros)</label>
+    <input id="cal-dist" type="number" min="0.01" step="0.01" value="5" placeholder="ej: 5">
+    <label>Instrucción</label>
+    <p style="font-size:11px;color:#6b7280">
+      1. Cierra este diálogo.<br>
+      2. Usa la herramienta Medir sobre la distancia conocida.<br>
+      3. La app calculará el factor de escala automáticamente.
+    </p>
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeModal()">Cerrar</button>
+      <button class="btn-pri" onclick="applyScaleCalibration()">Aplicar</button>
+    </div>`);
+};
+
+window.applyScaleCalibration = function() {
+  const d = parseFloat(document.getElementById('cal-dist')?.value);
+  if (isNaN(d) || d <= 0) { showToast('Distancia inválida', 'err'); return; }
+  S.calibratedMeters = d;
+  closeModal();
+  showToast('Próxima medición calibrará la escala automáticamente');
+};
+
+/* ── INIT ─────────────────────────────────────────────────── */
+resizeAll();
+setView('iso');
+// Signal bootstrap stubs to drain their queues
+if(window.__moduleReady) window.__moduleReady();
+// Show tutorial on first run
+setTimeout(showTutorial, 800);
+
+// Try to restore last model from IndexedDB
+dbListModels().then(keys => {
+  if (keys.length > 0) {
+    const lastKey = keys[keys.length - 1];
+    showToast('Modelo guardado disponible: ' + lastKey + ' — ver menú Archivo');
+  }
+}).catch(() => {});
+
+showToast('ARPlan Pro listo — arrastra un archivo GLB, GLTF o DXF','ok');
+</script>
+</body>
+</html>
