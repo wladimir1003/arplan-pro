@@ -1164,105 +1164,216 @@ function loadDXF(file){
 }
 
 function parseDXF(text){
+  // ── 1. Tokenizar en pares (code, value) ──────────────────────
   const raw=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-  const pairs=[];
+  const P=[];
   for(let i=0;i+1<raw.length;i+=2){
-    const code=parseInt(raw[i].trim(),10), value=raw[i+1].trim();
-    if(!isNaN(code)) pairs.push({code,value});
+    const c=parseInt(raw[i].trim(),10), v=raw[i+1].trim();
+    if(!isNaN(c)) P.push([c,v]);
   }
   const res={segments:[],circles:[],arcs:[],layers:[]};
   const lset=new Set();
-  // Find ENTITIES section
-  let pi=0, inEnt=false;
-  while(pi<pairs.length){
-    if(pairs[pi].code===0&&pairs[pi].value==='SECTION'){ pi++;
-      if(pi<pairs.length&&pairs[pi].code===2&&pairs[pi].value==='ENTITIES'){inEnt=true;pi++;break;} }
-    pi++;
-  }
-  if(!inEnt) pi=0; // fallback: scan whole file
-  while(pi<pairs.length){
-    const p=pairs[pi];
-    if(p.code===0&&p.value==='ENDSEC') break;
-    if(p.code===0&&p.value==='LINE'){
-      pi++; let x1=0,y1=0,z1=0,x2=0,y2=0,z2=0,layer='0';
-      while(pi<pairs.length&&pairs[pi].code!==0){
-        const{code,value}=pairs[pi];
-        if(code===8)  layer=value;
-        if(code===10) x1=parseFloat(value);
-        if(code===20) y1=parseFloat(value);
-        if(code===30) z1=parseFloat(value);
-        if(code===11) x2=parseFloat(value);
-        if(code===21) y2=parseFloat(value);
-        if(code===31) z2=parseFloat(value);
-        pi++;
-      }
-      if(isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)&&
-        (Math.abs(x1-x2)>1e-10||Math.abs(y1-y2)>1e-10||Math.abs(z1-z2)>1e-10)){
-        res.segments.push({x1,y1,z1,x2,y2,z2,layer}); lset.add(layer); }
-      continue;
-    }
-    if(p.code===0&&(p.value==='LWPOLYLINE'||p.value==='POLYLINE'||p.value==='SPLINE')){
-      pi++; const pts=[]; let layer='0',closed=false,lx=null,ly=null,lz=0,elev=0;
-      while(pi<pairs.length&&pairs[pi].code!==0){
-        const{code,value}=pairs[pi];
-        if(code===8)  layer=value;
-        if(code===38) elev=parseFloat(value); // LWPOLYLINE elevation
-        if(code===70&&(parseInt(value)&1)) closed=true;
-        if(code===10) lx=parseFloat(value);
-        if(code===30) lz=parseFloat(value); // Z per vertex (3D polyline)
-        if(code===20){
-          ly=parseFloat(value);
-          if(lx!==null&&isFinite(lx)&&isFinite(ly)){
-            pts.push([lx,ly,isFinite(lz)?lz:elev]);
-            lx=null; lz=0;
+
+  // ── 2. Leer sección BLOCKS ───────────────────────────────────
+  const blocks={};
+  let bi=0;
+  while(bi<P.length){
+    if(P[bi][0]===0&&P[bi][1]==='SECTION'&&P[bi+1]?.[0]===2&&P[bi+1]?.[1]==='BLOCKS'){
+      bi+=2;
+      while(bi<P.length){
+        if(P[bi][0]===0&&P[bi][1]==='ENDSEC') break;
+        if(P[bi][0]===0&&P[bi][1]==='BLOCK'){
+          bi++;
+          let bname='*';
+          while(bi<P.length&&P[bi][0]!==0){ if(P[bi][0]===2) bname=P[bi][1]; bi++; }
+          const blk={segments:[],circles:[],arcs:[]};
+          blocks[bname]=blk;
+          while(bi<P.length&&!(P[bi][0]===0&&P[bi][1]==='ENDBLK')){
+            bi=readEntity(P,bi,blk,lset,blocks);
           }
-        }
-        pi++;
+          if(bi<P.length) bi++; // skip ENDBLK
+        } else { bi++; }
       }
-      if(closed&&pts.length) pts.push(pts[0]);
-      for(let j=0;j<pts.length-1;j++)
-        res.segments.push({
-          x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,
-          x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
-      if(pts.length) lset.add(layer);
-      continue;
     }
-    if(p.code===0&&p.value==='CIRCLE'){
-      pi++; let cx=0,cy=0,cz=0,r=0,layer='0';
-      while(pi<pairs.length&&pairs[pi].code!==0){
-        const{code,value}=pairs[pi];
-        if(code===8)  layer=value;
-        if(code===10) cx=parseFloat(value);
-        if(code===20) cy=parseFloat(value);
-        if(code===30) cz=parseFloat(value);
-        if(code===38) cz=parseFloat(value); // elevation fallback
-        if(code===40) r=parseFloat(value);
-        pi++;
-      }
-      if(r>0&&isFinite(cx)&&isFinite(cy)){res.circles.push({cx,cy,cz,r,layer});lset.add(layer);}
-      continue;
-    }
-    if(p.code===0&&p.value==='ARC'){
-      pi++; let cx=0,cy=0,cz=0,r=0,sa=0,ea=360,layer='0';
-      while(pi<pairs.length&&pairs[pi].code!==0){
-        const{code,value}=pairs[pi];
-        if(code===8)  layer=value;
-        if(code===10) cx=parseFloat(value);
-        if(code===20) cy=parseFloat(value);
-        if(code===30) cz=parseFloat(value);
-        if(code===38) cz=parseFloat(value); // elevation fallback
-        if(code===40) r=parseFloat(value);
-        if(code===50) sa=parseFloat(value);
-        if(code===51) ea=parseFloat(value);
-        pi++;
-      }
-      if(r>0&&isFinite(cx)&&isFinite(cy)){res.arcs.push({cx,cy,cz,r,startAngle:sa,endAngle:ea,layer});lset.add(layer);}
-      continue;
-    }
-    pi++;
+    bi++;
   }
+
+  // ── 3. Leer sección ENTITIES ─────────────────────────────────
+  let ei=0, found=false;
+  while(ei<P.length){
+    if(P[ei][0]===0&&P[ei][1]==='SECTION'&&P[ei+1]?.[0]===2&&P[ei+1]?.[1]==='ENTITIES'){
+      found=true; ei+=2; break;
+    }
+    ei++;
+  }
+  if(!found) ei=0;
+  while(ei<P.length){
+    if(P[ei][0]===0&&P[ei][1]==='ENDSEC') break;
+    ei=readEntity(P,ei,res,lset,blocks);
+  }
+
   res.layers=Array.from(lset);
   return res;
+}
+
+function readEntity(P,i,res,lset,blocks){
+  if(P[i][0]!==0) return i+1;
+  const type=P[i][1];
+
+  // ── LINE ────────────────────────────────────────────────────
+  if(type==='LINE'){
+    i++; let x1=0,y1=0,z1=0,x2=0,y2=0,z2=0,layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8)  layer=v;
+      if(c===10) x1=parseFloat(v); if(c===20) y1=parseFloat(v); if(c===30) z1=parseFloat(v);
+      if(c===11) x2=parseFloat(v); if(c===21) y2=parseFloat(v); if(c===31) z2=parseFloat(v);
+      i++;
+    }
+    if(isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)&&
+      (Math.abs(x1-x2)>1e-10||Math.abs(y1-y2)>1e-10||Math.abs(z1-z2)>1e-10)){
+      res.segments.push({x1,y1,z1,x2,y2,z2,layer}); lset.add(layer);
+    }
+    return i;
+  }
+
+  // ── LWPOLYLINE / POLYLINE / SPLINE ──────────────────────────
+  if(type==='LWPOLYLINE'||type==='POLYLINE'||type==='SPLINE'){
+    i++; const pts=[]; let layer='0',closed=false,lx=null,ly=null,lz=0,elev=0;
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8)  layer=v;
+      if(c===38) elev=parseFloat(v);
+      if(c===70&&(parseInt(v)&1)) closed=true;
+      if(c===10) lx=parseFloat(v);
+      if(c===30) lz=parseFloat(v);
+      if(c===20){ ly=parseFloat(v);
+        if(lx!==null&&isFinite(lx)&&isFinite(ly)){
+          pts.push([lx,ly,isFinite(lz)&&lz!==0?lz:elev]); lx=null; lz=0;
+        }
+      }
+      i++;
+    }
+    // POLYLINE clásica: leer VERTEX separados
+    if(type==='POLYLINE'){
+      while(i<P.length&&P[i][0]===0&&P[i][1]==='VERTEX'){
+        i++; let vx=null,vy=null,vz=0;
+        while(i<P.length&&P[i][0]!==0){
+          const[c,v]=P[i];
+          if(c===10) vx=parseFloat(v); if(c===20) vy=parseFloat(v); if(c===30) vz=parseFloat(v);
+          i++;
+        }
+        if(vx!==null&&vy!==null&&isFinite(vx)&&isFinite(vy)) pts.push([vx,vy,vz]);
+      }
+      if(i<P.length&&P[i][0]===0&&P[i][1]==='SEQEND'){
+        i++; while(i<P.length&&P[i][0]!==0) i++;
+      }
+    }
+    if(closed&&pts.length) pts.push(pts[0]);
+    for(let j=0;j<pts.length-1;j++)
+      res.segments.push({x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,
+                         x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
+    if(pts.length) lset.add(layer);
+    return i;
+  }
+
+  // ── CIRCLE ──────────────────────────────────────────────────
+  if(type==='CIRCLE'){
+    i++; let cx=0,cy=0,cz=0,r=0,layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8) layer=v; if(c===10) cx=parseFloat(v); if(c===20) cy=parseFloat(v);
+      if(c===30||c===38) cz=parseFloat(v); if(c===40) r=parseFloat(v);
+      i++;
+    }
+    if(r>0&&isFinite(cx)&&isFinite(cy)){res.circles.push({cx,cy,cz,r,layer});lset.add(layer);}
+    return i;
+  }
+
+  // ── ARC ─────────────────────────────────────────────────────
+  if(type==='ARC'){
+    i++; let cx=0,cy=0,cz=0,r=0,sa=0,ea=360,layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8) layer=v; if(c===10) cx=parseFloat(v); if(c===20) cy=parseFloat(v);
+      if(c===30||c===38) cz=parseFloat(v); if(c===40) r=parseFloat(v);
+      if(c===50) sa=parseFloat(v); if(c===51) ea=parseFloat(v);
+      i++;
+    }
+    if(r>0&&isFinite(cx)&&isFinite(cy)){
+      res.arcs.push({cx,cy,cz,r,startAngle:sa,endAngle:ea,layer}); lset.add(layer);
+    }
+    return i;
+  }
+
+  // ── 3DFACE ──────────────────────────────────────────────────
+  if(type==='3DFACE'){
+    i++; let vs=[[0,0,0],[0,0,0],[0,0,0],[0,0,0]], layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8)  layer=v;
+      // vertex 0: 10,20,30 | vertex 1: 11,21,31 | vertex 2: 12,22,32 | vertex 3: 13,23,33
+      if(c>=10&&c<=13) vs[c-10][0]=parseFloat(v);
+      if(c>=20&&c<=23) vs[c-20][1]=parseFloat(v);
+      if(c>=30&&c<=33) vs[c-30][2]=parseFloat(v);
+      i++;
+    }
+    // 3DFACE: 4 edges (0-1, 1-2, 2-3, 3-0)
+    const edges=[[0,1],[1,2],[2,3],[3,0]];
+    edges.forEach(([a,b])=>{
+      const[x1,y1,z1]=vs[a],[x2,y2,z2]=vs[b];
+      if(Math.hypot(x2-x1,y2-y1,z2-z1)>1e-10)
+        res.segments.push({x1,y1,z1,x2,y2,z2,layer});
+    });
+    lset.add(layer);
+    return i;
+  }
+
+  // ── INSERT (expansión de bloque) ─────────────────────────────
+  if(type==='INSERT'){
+    i++; let bname='',ix=0,iy=0,iz=0,sx=1,sy=1,sz_=1,rot=0,layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8)  layer=v;
+      if(c===2)  bname=v;
+      if(c===10) ix=parseFloat(v); if(c===20) iy=parseFloat(v); if(c===30) iz=parseFloat(v);
+      if(c===41) sx=parseFloat(v); if(c===42) sy=parseFloat(v); if(c===43) sz_=parseFloat(v);
+      if(c===50) rot=parseFloat(v)*Math.PI/180;
+      i++;
+    }
+    const blk=blocks[bname];
+    if(blk){
+      const cos=Math.cos(rot), sin=Math.sin(rot);
+      const xf=(x,y,z)=>({
+        x: ix + x*sx*cos - y*sy*sin,
+        y: iy + x*sx*sin + y*sy*cos,
+        z: iz + z*sz_
+      });
+      blk.segments.forEach(s=>{
+        const a=xf(s.x1,s.y1,s.z1), b=xf(s.x2,s.y2,s.z2);
+        res.segments.push({x1:a.x,y1:a.y,z1:a.z,x2:b.x,y2:b.y,z2:b.z,layer:s.layer||layer});
+        lset.add(s.layer||layer);
+      });
+      blk.circles.forEach(c=>{
+        const p=xf(c.cx,c.cy,c.cz);
+        res.circles.push({cx:p.x,cy:p.y,cz:p.z,r:c.r*Math.max(sx,sy),layer:c.layer||layer});
+        lset.add(c.layer||layer);
+      });
+      blk.arcs.forEach(a=>{
+        const p=xf(a.cx,a.cy,a.cz);
+        res.arcs.push({cx:p.x,cy:p.y,cz:p.z,r:a.r*Math.max(sx,sy),
+          startAngle:a.startAngle+rot*180/Math.PI,
+          endAngle:a.endAngle+rot*180/Math.PI,layer:a.layer||layer});
+        lset.add(a.layer||layer);
+      });
+    }
+    return i;
+  }
+
+  // Entidad no reconocida: saltar hasta el siguiente código 0
+  i++;
+  while(i<P.length&&P[i][0]!==0) i++;
+  return i;
 }
 
 /* ── DEMO MODEL ───────────────────────────────────────────── */
@@ -1785,7 +1896,19 @@ if (localStorage.getItem('arplan_version') !== APP_VERSION) {
   localStorage.removeItem('arplan_tutorial_done');
   localStorage.setItem('arplan_version', APP_VERSION);
 }
-if ('serviceWorker' in navigator) {
+// Solo registrar SW en orígenes que realmente sirven el archivo sw.js.
+// Excluir explícitamente previsualizaciones (claude.ai, codepen, etc.)
+const SW_ALLOWED_ORIGINS = [
+  'localhost',
+  '127.0.0.1',
+  '.github.io',
+  '.github.com',
+];
+const _swOriginOk = SW_ALLOWED_ORIGINS.some(o =>
+  location.hostname === o || location.hostname.endsWith(o)
+);
+
+if ('serviceWorker' in navigator && _swOriginOk) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js')
       .then(reg => {
@@ -1934,97 +2057,9 @@ function parseDXFInWorker(text) {
   });
 }
 
-/* Fallback DXF parser (mismo que antes, por si el Worker falla) */
+/* Fallback DXF parser — usa la misma función readEntity que parseDXF */
 function parseDXFFallback(text) {
-  const raw = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-  const pairs = [];
-  for (let i = 0; i+1 < raw.length; i += 2) {
-    const code = parseInt(raw[i].trim(), 10);
-    const value = raw[i+1].trim();
-    if (!isNaN(code)) pairs.push([code, value]);
-  }
-  const res = { segments:[], circles:[], arcs:[], texts:[], points:[], layers:[], layerColors:{}, units:{code:0,factor:1,label:'desconocido'} };
-  const lset = new Set();
-  let pi = 0, found = false;
-  while (pi < pairs.length) {
-    if (pairs[pi][0]===0 && pairs[pi][1]==='SECTION') {
-      if (pairs[pi+1]?.[0]===2 && pairs[pi+1]?.[1]==='ENTITIES') { found=true; pi+=2; break; }
-    }
-    pi++;
-  }
-  if (!found) pi = 0;
-  while (pi < pairs.length) {
-    const [code, value] = pairs[pi];
-    if (code===0 && value==='ENDSEC') break;
-    if (code===0 && value==='LINE') {
-      pi++; let x1=0,y1=0,z1=0,x2=0,y2=0,z2=0,layer='0';
-      while (pi < pairs.length && pairs[pi][0] !== 0) {
-        const [c,v] = pairs[pi];
-        if (c===8)  layer=v;
-        if (c===10) x1=parseFloat(v); if (c===20) y1=parseFloat(v); if (c===30) z1=parseFloat(v);
-        if (c===11) x2=parseFloat(v); if (c===21) y2=parseFloat(v); if (c===31) z2=parseFloat(v);
-        pi++;
-      }
-      if (isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)) {
-        res.segments.push({x1,y1,z1,x2,y2,z2,layer}); lset.add(layer); }
-      continue;
-    }
-    if (code===0 && (value==='LWPOLYLINE'||value==='POLYLINE')) {
-      pi++; const pts=[]; let layer='0', closed=false, lx=null, ly=null, lz=0, elev=0;
-      while (pi < pairs.length && pairs[pi][0] !== 0) {
-        const [c,v] = pairs[pi];
-        if (c===8)  layer=v;
-        if (c===38) elev=parseFloat(v);
-        if (c===70 && (parseInt(v)&1)) closed=true;
-        if (c===10) lx=parseFloat(v);
-        if (c===30) lz=parseFloat(v);
-        if (c===20) {
-          ly=parseFloat(v);
-          if (lx!==null&&isFinite(lx)&&isFinite(ly)) {
-            pts.push([lx, ly, isFinite(lz)?lz:elev]);
-            lx=null; lz=0;
-          }
-        }
-        pi++;
-      }
-      if (closed && pts.length) pts.push(pts[0]);
-      for (let j=0;j<pts.length-1;j++)
-        res.segments.push({
-          x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,
-          x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
-      if (pts.length) lset.add(layer);
-      continue;
-    }
-    if (code===0 && value==='CIRCLE') {
-      pi++; let cx=0,cy=0,cz=0,r=0,layer='0';
-      while (pi < pairs.length && pairs[pi][0] !== 0) {
-        const [c,v] = pairs[pi];
-        if (c===8)  layer=v;
-        if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v);
-        if (c===30) cz=parseFloat(v); if (c===38) cz=parseFloat(v);
-        if (c===40) r=parseFloat(v);
-        pi++;
-      }
-      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.circles.push({cx,cy,cz,r,layer}); lset.add(layer); }
-      continue;
-    }
-    if (code===0 && value==='ARC') {
-      pi++; let cx=0,cy=0,cz=0,r=0,sa=0,ea=360,layer='0';
-      while (pi < pairs.length && pairs[pi][0] !== 0) {
-        const [c,v] = pairs[pi];
-        if (c===8)  layer=v;
-        if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v);
-        if (c===30) cz=parseFloat(v); if (c===38) cz=parseFloat(v);
-        if (c===40) r=parseFloat(v); if (c===50) sa=parseFloat(v); if (c===51) ea=parseFloat(v);
-        pi++;
-      }
-      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.arcs.push({cx,cy,cz,r,startAngle:sa,endAngle:ea,layer}); lset.add(layer); }
-      continue;
-    }
-    pi++;
-  }
-  res.layers = Array.from(lset);
-  return res;
+  return parseDXF(text);
 }
 
 /* ============================================================
