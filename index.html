@@ -1114,30 +1114,43 @@ function loadDXF(file){
       const mat=l=>new THREE.LineBasicMaterial({color:LM[l]||'#3b82f6'});
 
       parsed.segments.forEach(s=>{
+        // DXF axis → Three.js axis: DXF_X→X, DXF_Z→Y(height), DXF_Y→Z(depth)
         const g=new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(s.x1,0,s.y1), new THREE.Vector3(s.x2,0,s.y2)]);
+          new THREE.Vector3(s.x1, s.z1||0, s.y1),
+          new THREE.Vector3(s.x2, s.z2||0, s.y2)]);
         group.add(new THREE.Line(g,mat(s.layer)));
       });
       parsed.circles.forEach(c=>{
         const pts=[], N=Math.max(32,Math.floor(c.r*4));
-        for(let i=0;i<=N;i++){const a=i/N*Math.PI*2; pts.push(new THREE.Vector3(c.cx+Math.cos(a)*c.r,0,c.cy+Math.sin(a)*c.r));}
+        const cz=c.cz||0;
+        for(let i=0;i<=N;i++){
+          const a=i/N*Math.PI*2;
+          pts.push(new THREE.Vector3(c.cx+Math.cos(a)*c.r, cz, c.cy+Math.sin(a)*c.r));
+        }
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(c.layer)));
       });
       parsed.arcs.forEach(a=>{
         const pts=[];
+        const az=a.cz||0;
         let s0=a.startAngle*Math.PI/180, e0=a.endAngle*Math.PI/180;
         if(e0<=s0) e0+=Math.PI*2;
         const N=Math.max(16,Math.floor((e0-s0)/(Math.PI/32)));
-        for(let i=0;i<=N;i++){const ang=s0+(e0-s0)*i/N; pts.push(new THREE.Vector3(a.cx+Math.cos(ang)*a.r,0,a.cy+Math.sin(ang)*a.r));}
+        for(let i=0;i<=N;i++){
+          const ang=s0+(e0-s0)*i/N;
+          pts.push(new THREE.Vector3(a.cx+Math.cos(ang)*a.r, az, a.cy+Math.sin(ang)*a.r));
+        }
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(a.layer)));
       });
 
       const box=new THREE.Box3().setFromObject(group);
       if(box.isEmpty()){showToast('No se pudo calcular bounding box','err');setProgress(0);return;}
-      const sz=box.getSize(new THREE.Vector3()), maxD=Math.max(sz.x,sz.z,0.001);
+      const sz=box.getSize(new THREE.Vector3());
+      // Include all 3 axes in scale calculation
+      const maxD=Math.max(sz.x,sz.y,sz.z,0.001);
       const sc=40/maxD; group.scale.set(sc,sc,sc); S.zoomFactor=sc;
       const ctr=box.getCenter(new THREE.Vector3());
-      group.position.set(-ctr.x*sc,0,-ctr.z*sc);
+      // Center on all axes
+      group.position.set(-ctr.x*sc,-ctr.y*sc,-ctr.z*sc);
 
       S.modelObj=group; scene.add(group);
       const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
@@ -1171,61 +1184,79 @@ function parseDXF(text){
     const p=pairs[pi];
     if(p.code===0&&p.value==='ENDSEC') break;
     if(p.code===0&&p.value==='LINE'){
-      pi++; let x1=0,y1=0,x2=0,y2=0,layer='0';
+      pi++; let x1=0,y1=0,z1=0,x2=0,y2=0,z2=0,layer='0';
       while(pi<pairs.length&&pairs[pi].code!==0){
         const{code,value}=pairs[pi];
-        if(code===8) layer=value;
+        if(code===8)  layer=value;
         if(code===10) x1=parseFloat(value);
         if(code===20) y1=parseFloat(value);
+        if(code===30) z1=parseFloat(value);
         if(code===11) x2=parseFloat(value);
         if(code===21) y2=parseFloat(value);
+        if(code===31) z2=parseFloat(value);
         pi++;
       }
-      if(isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)&&(Math.abs(x1-x2)>1e-10||Math.abs(y1-y2)>1e-10)){
-        res.segments.push({x1,y1,x2,y2,layer}); lset.add(layer); }
+      if(isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)&&
+        (Math.abs(x1-x2)>1e-10||Math.abs(y1-y2)>1e-10||Math.abs(z1-z2)>1e-10)){
+        res.segments.push({x1,y1,z1,x2,y2,z2,layer}); lset.add(layer); }
       continue;
     }
     if(p.code===0&&(p.value==='LWPOLYLINE'||p.value==='POLYLINE'||p.value==='SPLINE')){
-      pi++; const pts=[]; let layer='0',closed=false,lx=null,ly=null;
+      pi++; const pts=[]; let layer='0',closed=false,lx=null,ly=null,lz=0,elev=0;
       while(pi<pairs.length&&pairs[pi].code!==0){
         const{code,value}=pairs[pi];
-        if(code===8) layer=value;
+        if(code===8)  layer=value;
+        if(code===38) elev=parseFloat(value); // LWPOLYLINE elevation
         if(code===70&&(parseInt(value)&1)) closed=true;
-        if(code===10){lx=parseFloat(value);}
-        if(code===20){ly=parseFloat(value); if(lx!==null&&isFinite(lx)&&isFinite(ly)){pts.push([lx,ly]);lx=null;}}
+        if(code===10) lx=parseFloat(value);
+        if(code===30) lz=parseFloat(value); // Z per vertex (3D polyline)
+        if(code===20){
+          ly=parseFloat(value);
+          if(lx!==null&&isFinite(lx)&&isFinite(ly)){
+            pts.push([lx,ly,isFinite(lz)?lz:elev]);
+            lx=null; lz=0;
+          }
+        }
         pi++;
       }
       if(closed&&pts.length) pts.push(pts[0]);
-      for(let j=0;j<pts.length-1;j++) res.segments.push({x1:pts[j][0],y1:pts[j][1],x2:pts[j+1][0],y2:pts[j+1][1],layer});
+      for(let j=0;j<pts.length-1;j++)
+        res.segments.push({
+          x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,
+          x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
       if(pts.length) lset.add(layer);
       continue;
     }
     if(p.code===0&&p.value==='CIRCLE'){
-      pi++; let cx=0,cy=0,r=0,layer='0';
+      pi++; let cx=0,cy=0,cz=0,r=0,layer='0';
       while(pi<pairs.length&&pairs[pi].code!==0){
         const{code,value}=pairs[pi];
         if(code===8)  layer=value;
         if(code===10) cx=parseFloat(value);
         if(code===20) cy=parseFloat(value);
+        if(code===30) cz=parseFloat(value);
+        if(code===38) cz=parseFloat(value); // elevation fallback
         if(code===40) r=parseFloat(value);
         pi++;
       }
-      if(r>0&&isFinite(cx)&&isFinite(cy)){res.circles.push({cx,cy,r,layer});lset.add(layer);}
+      if(r>0&&isFinite(cx)&&isFinite(cy)){res.circles.push({cx,cy,cz,r,layer});lset.add(layer);}
       continue;
     }
     if(p.code===0&&p.value==='ARC'){
-      pi++; let cx=0,cy=0,r=0,sa=0,ea=360,layer='0';
+      pi++; let cx=0,cy=0,cz=0,r=0,sa=0,ea=360,layer='0';
       while(pi<pairs.length&&pairs[pi].code!==0){
         const{code,value}=pairs[pi];
         if(code===8)  layer=value;
         if(code===10) cx=parseFloat(value);
         if(code===20) cy=parseFloat(value);
+        if(code===30) cz=parseFloat(value);
+        if(code===38) cz=parseFloat(value); // elevation fallback
         if(code===40) r=parseFloat(value);
         if(code===50) sa=parseFloat(value);
         if(code===51) ea=parseFloat(value);
         pi++;
       }
-      if(r>0&&isFinite(cx)&&isFinite(cy)){res.arcs.push({cx,cy,r,startAngle:sa,endAngle:ea,layer});lset.add(layer);}
+      if(r>0&&isFinite(cx)&&isFinite(cy)){res.arcs.push({cx,cy,cz,r,startAngle:sa,endAngle:ea,layer});lset.add(layer);}
       continue;
     }
     pi++;
@@ -1926,50 +1957,68 @@ function parseDXFFallback(text) {
     const [code, value] = pairs[pi];
     if (code===0 && value==='ENDSEC') break;
     if (code===0 && value==='LINE') {
-      pi++; let x1=0,y1=0,x2=0,y2=0,layer='0';
+      pi++; let x1=0,y1=0,z1=0,x2=0,y2=0,z2=0,layer='0';
       while (pi < pairs.length && pairs[pi][0] !== 0) {
         const [c,v] = pairs[pi];
-        if (c===8) layer=v; if (c===10) x1=parseFloat(v); if (c===20) y1=parseFloat(v);
-        if (c===11) x2=parseFloat(v); if (c===21) y2=parseFloat(v);
+        if (c===8)  layer=v;
+        if (c===10) x1=parseFloat(v); if (c===20) y1=parseFloat(v); if (c===30) z1=parseFloat(v);
+        if (c===11) x2=parseFloat(v); if (c===21) y2=parseFloat(v); if (c===31) z2=parseFloat(v);
         pi++;
       }
       if (isFinite(x1)&&isFinite(y1)&&isFinite(x2)&&isFinite(y2)) {
-        res.segments.push({x1,y1,x2,y2,layer}); lset.add(layer); }
+        res.segments.push({x1,y1,z1,x2,y2,z2,layer}); lset.add(layer); }
       continue;
     }
     if (code===0 && (value==='LWPOLYLINE'||value==='POLYLINE')) {
-      pi++; const pts=[]; let layer='0', closed=false, lx=null, ly=null;
+      pi++; const pts=[]; let layer='0', closed=false, lx=null, ly=null, lz=0, elev=0;
       while (pi < pairs.length && pairs[pi][0] !== 0) {
         const [c,v] = pairs[pi];
-        if (c===8) layer=v; if (c===70 && (parseInt(v)&1)) closed=true;
+        if (c===8)  layer=v;
+        if (c===38) elev=parseFloat(v);
+        if (c===70 && (parseInt(v)&1)) closed=true;
         if (c===10) lx=parseFloat(v);
-        if (c===20) { ly=parseFloat(v); if (lx!==null&&isFinite(lx)&&isFinite(ly)) { pts.push([lx,ly]); lx=null; } }
+        if (c===30) lz=parseFloat(v);
+        if (c===20) {
+          ly=parseFloat(v);
+          if (lx!==null&&isFinite(lx)&&isFinite(ly)) {
+            pts.push([lx, ly, isFinite(lz)?lz:elev]);
+            lx=null; lz=0;
+          }
+        }
         pi++;
       }
       if (closed && pts.length) pts.push(pts[0]);
-      for (let j=0;j<pts.length-1;j++) res.segments.push({x1:pts[j][0],y1:pts[j][1],x2:pts[j+1][0],y2:pts[j+1][1],layer});
+      for (let j=0;j<pts.length-1;j++)
+        res.segments.push({
+          x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,
+          x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
       if (pts.length) lset.add(layer);
       continue;
     }
     if (code===0 && value==='CIRCLE') {
-      pi++; let cx=0,cy=0,r=0,layer='0';
+      pi++; let cx=0,cy=0,cz=0,r=0,layer='0';
       while (pi < pairs.length && pairs[pi][0] !== 0) {
         const [c,v] = pairs[pi];
-        if (c===8) layer=v; if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v); if (c===40) r=parseFloat(v);
+        if (c===8)  layer=v;
+        if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v);
+        if (c===30) cz=parseFloat(v); if (c===38) cz=parseFloat(v);
+        if (c===40) r=parseFloat(v);
         pi++;
       }
-      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.circles.push({cx,cy,r,layer}); lset.add(layer); }
+      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.circles.push({cx,cy,cz,r,layer}); lset.add(layer); }
       continue;
     }
     if (code===0 && value==='ARC') {
-      pi++; let cx=0,cy=0,r=0,sa=0,ea=360,layer='0';
+      pi++; let cx=0,cy=0,cz=0,r=0,sa=0,ea=360,layer='0';
       while (pi < pairs.length && pairs[pi][0] !== 0) {
         const [c,v] = pairs[pi];
-        if (c===8) layer=v; if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v);
+        if (c===8)  layer=v;
+        if (c===10) cx=parseFloat(v); if (c===20) cy=parseFloat(v);
+        if (c===30) cz=parseFloat(v); if (c===38) cz=parseFloat(v);
         if (c===40) r=parseFloat(v); if (c===50) sa=parseFloat(v); if (c===51) ea=parseFloat(v);
         pi++;
       }
-      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.arcs.push({cx,cy,r,startAngle:sa,endAngle:ea,layer}); lset.add(layer); }
+      if (r>0&&isFinite(cx)&&isFinite(cy)) { res.arcs.push({cx,cy,cz,r,startAngle:sa,endAngle:ea,layer}); lset.add(layer); }
       continue;
     }
     pi++;
