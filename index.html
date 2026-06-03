@@ -240,7 +240,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
 </head>
 <body>
 <div id="app">
-
+ 
 <!-- ===== MENUBAR ===== -->
 <div id="menubar">
   <div class="menu-parent"><div class="menu-trigger" data-menu="m-arch">Archivo</div>
@@ -315,7 +315,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
   </div>
   <div class="app-title" id="title-bar">ARPlan Pro · Sin proyecto</div>
 </div>
-
+ 
 <!-- ===== TOOLBAR ===== -->
 <div id="toolbar">
   <div class="tb-group">
@@ -363,7 +363,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     <button class="tb-btn" id="tb-cam" onclick="toggleCameraPassthrough()" title="Cámara + Plano" style="color:#93c5fd"><i class="ti ti-camera"></i></button>
   </div>
 </div>
-
+ 
 <!-- ===== LEFT PALETTE ===== -->
 <div id="left-palette">
   <button class="tool-btn active" id="tl-select" onclick="setTool('select')" title="Seleccionar (S)"><i class="ti ti-pointer"></i></button>
@@ -384,7 +384,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
   <div class="tool-sep"></div>
   <button class="tool-btn" id="tl-eraser" onclick="setTool('eraser')" title="Borrar"><i class="ti ti-eraser"></i></button>
 </div>
-
+ 
 <!-- ===== VIEWPORT ===== -->
 <div id="viewport">
   <video id="cam-passthrough" playsinline autoplay muted></video>
@@ -435,7 +435,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
   </div>
   <input type="file" id="file-input" accept=".glb,.gltf,.dxf" onchange="handleFileSelect(this.files[0])"><input type="file" id="cam-capture-input" accept="image/*" capture="environment" style="display:none" onchange="handleCamCapture(this)">
 </div>
-
+ 
 <!-- ===== RIGHT PANEL ===== -->
 <div id="right-panel">
   <div class="rp-section">
@@ -510,11 +510,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     </div>
   </div>
 </div>
-
+ 
 <!-- Panel FAB (tablet) -->
 <div id="panel-fab" onclick="openDrawer()"><i class="ti ti-layout-sidebar-right"></i></div>
 <div id="drawer-overlay" onclick="closeDrawer()"></div>
-
+ 
 <!-- ===== STATUS BAR ===== -->
 <div id="statusbar">
   <div class="sb-item" id="sb-file"><i class="ti ti-file"></i> Sin proyecto</div>
@@ -524,8 +524,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
   <div class="sb-sp"></div>
   <div class="sb-item ok" id="sb-save"><i class="ti ti-circle-check"></i> Listo</div>
 </div>
-
-
+ 
+ 
 <!-- model-viewer hidden (iOS AR fallback) -->
 <div id="mv-container" style="display:none;position:fixed;inset:0;z-index:5000;background:#000">
   <button onclick="document.getElementById('mv-container').style.display='none'"
@@ -543,7 +543,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     </button>
   </model-viewer>
 </div>
-
+ 
 <!-- Tutorial overlay (first run) -->
 <div id="tutorial-overlay" style="display:none;position:fixed;inset:0;z-index:6000;
   background:rgba(10,15,25,.96);flex-direction:column;align-items:center;
@@ -565,14 +565,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     style="font-size:11px;color:#6b7280;background:transparent;border:none;
     cursor:pointer;text-decoration:underline;padding:4px">Saltar tutorial</button>
 </div>
-
+ 
 </div><!-- #app -->
-
+ 
 <div id="toast-ct"></div>
 <div id="modal-overlay" class="modal-overlay" style="display:none" onclick="closeModal(event)">
   <div class="modal" id="modal-box"></div>
 </div>
-
+ 
 <!-- ===== SYNC BOOTSTRAP: define globals before module loads ===== -->
 <script>
 (function(){
@@ -672,7 +672,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
   });
 })();
 </script>
-
+ 
 <!-- Three.js -->
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"}}</script>
 <script type="module">
@@ -680,7 +680,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader }    from 'three/addons/loaders/GLTFLoader.js';
 import { ARButton }      from 'three/addons/webxr/ARButton.js';
-
+ 
 /* ── Platform detection — MUST be first, used by renderer init ── */
 const IS_IOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -689,7 +689,7 @@ const IS_ANDROID = /Android/i.test(navigator.userAgent);
 const IS_MOBILE  = IS_IOS || IS_ANDROID ||
                    /Mobi|Tablet|Touch/i.test(navigator.userAgent);
 const IS_DESKTOP = !IS_MOBILE;
-
+ 
 /* ── STATE ─────────────────────────────────────────────────── */
 const S = {
   fileName:null, activeTool:'select',
@@ -706,11 +706,11 @@ const S = {
 };
 // expose S for sliders in HTML
 window.S = S;
-
+ 
 /* ── THREE.JS ──────────────────────────────────────────────── */
 const vpEl   = document.getElementById('viewport');
 const canvas3 = document.getElementById('three-canvas');
-
+ 
 const renderer = new THREE.WebGLRenderer({
   canvas:canvas3, antialias:true, alpha:true, premultipliedAlpha:false,
   preserveDrawingBuffer:true
@@ -721,11 +721,11 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.xr.enabled = true;
 renderer.setClearColor(0x0d1117, 1); // match background color
-
+ 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55,1,0.01,2000);
 camera.position.set(0,15,20);
-
+ 
 // OrbitControls — must use the THREE canvas, not the draw canvas
 const controls = new OrbitControls(camera, canvas3);
 controls.enableDamping    = true;
@@ -744,20 +744,20 @@ controls.touches = {
 };
 // Reduce damping lag on mobile for more responsive feel
 if(IS_MOBILE) { controls.dampingFactor = 0.15; controls.rotateSpeed = 0.7; }
-
+ 
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const dL = new THREE.DirectionalLight(0xffffff,1.2);
 dL.position.set(10,20,10); dL.castShadow=true; scene.add(dL);
-
+ 
 const grid = new THREE.GridHelper(200,200,0x334155,0x1e293b);
 scene.add(grid);
-
+ 
 const reticleMesh = new THREE.Mesh(
   new THREE.RingGeometry(0.15,0.22,32).rotateX(-Math.PI/2),
   new THREE.MeshBasicMaterial({color:0x00ff88,side:THREE.DoubleSide})
 );
 reticleMesh.visible=false; scene.add(reticleMesh);
-
+ 
 function resizeAll(){
   const w=vpEl.clientWidth, h=vpEl.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -769,7 +769,7 @@ window.addEventListener('resize',resizeAll);
 if(window.ResizeObserver){
   new ResizeObserver(resizeAll).observe(vpEl);
 }
-
+ 
 // Render loop
 renderer.setAnimationLoop((t,frame)=>{
   if(frame && S.hitTestSource){
@@ -787,7 +787,7 @@ renderer.setAnimationLoop((t,frame)=>{
   renderer.render(scene,camera);
   document.getElementById('hud-zoom').textContent = camera.zoom.toFixed(2)+'x';
 });
-
+ 
 renderer.xr.addEventListener('sessionstart',async()=>{
   controls.enabled=false;
   document.getElementById('ar-reticle').style.display='block';
@@ -805,7 +805,7 @@ renderer.xr.addEventListener('sessionend',()=>{
   if(S.modelObj) S.modelObj.position.set(0,0,0);
   setMode('3d'); showToast('Sesión AR finalizada');
 });
-
+ 
 window.placeModelAR=function(){
   if(S.modelObj&&reticleMesh.visible){
     S.modelObj.position.copy(reticleMesh.position);
@@ -814,12 +814,12 @@ window.placeModelAR=function(){
     showToast('Modelo colocado','ok');
   }
 };
-
+ 
 /* ── DRAWING CANVAS ────────────────────────────────────────── */
 const drawEl  = document.getElementById('draw-canvas');
 const ctx2d   = drawEl.getContext('2d');
 let curStroke = null;
-
+ 
 const drawCanvas = {
   resize(){
     const r=vpEl.getBoundingClientRect();
@@ -834,9 +834,9 @@ const drawCanvas = {
     return{x:e.clientX-r.left, y:e.clientY-r.top};
   }
 };
-
+ 
 const DRAW_TOOLS=new Set(['pencil','highlight','line','rect','circle','cloud','text','arrow','eraser','measure','gpspin']);
-
+ 
 // ── Pointer events for drawing (stylus + touch + mouse) ──
 drawEl.addEventListener('pointerdown',e=>{
   const tool=S.activeTool;
@@ -846,7 +846,7 @@ drawEl.addEventListener('pointerdown',e=>{
   try{ drawEl.setPointerCapture(e.pointerId); }catch(_){}
   const pos=drawCanvas.getPos(e);
   const pres=(S.pressureMode&&e.pressure>0)?Math.max(0.3,e.pressure):1;
-
+ 
   if(tool==='gpspin'){
     const label=S.gpsPos?`${S.gpsPos.latitude.toFixed(4)},${S.gpsPos.longitude.toFixed(4)}`:'PIN';
     pushStroke({tool:'gpspin',color:S.activeColor,op:1,pos,label});
@@ -882,7 +882,7 @@ drawEl.addEventListener('pointerdown',e=>{
     points:[pos], startPos:pos
   };
 },{passive:false});
-
+ 
 drawEl.addEventListener('pointermove',e=>{
   if(!curStroke) return;
   e.preventDefault();
@@ -898,7 +898,7 @@ drawEl.addEventListener('pointermove',e=>{
   }
   document.getElementById('hud-xyz').textContent=`X:${Math.round(pos.x)}  Y:${Math.round(pos.y)}`;
 },{passive:false});
-
+ 
 drawEl.addEventListener('pointerup',e=>{
   if(!curStroke) return;
   const pos=drawCanvas.getPos(e);
@@ -912,11 +912,11 @@ drawEl.addEventListener('pointerup',e=>{
   pushStroke({...curStroke, points:curStroke.points?[...curStroke.points]:undefined});
   curStroke=null; redrawAll();
 });
-
+ 
 // Prevent iOS/Android from hijacking touch on the draw canvas
 drawEl.addEventListener('touchstart',e=>{ if(DRAW_TOOLS.has(S.activeTool)) e.preventDefault(); },{passive:false});
 drawEl.addEventListener('touchmove', e=>{ if(DRAW_TOOLS.has(S.activeTool)) e.preventDefault(); },{passive:false});
-
+ 
 // ── When NOT in a draw tool, pass touch through to OrbitControls ──
 // OrbitControls listens on canvas3; we need to let touches fall through draw canvas
 // Solution: toggle pointer-events on draw canvas based on current tool
@@ -925,7 +925,7 @@ function syncDrawCanvasPointerEvents(){
 }
 // Initialize
 syncDrawCanvasPointerEvents();
-
+ 
 function drawCurStroke(){
   if(!curStroke||!curStroke.points||curStroke.points.length<2) return;
   const{points,color,lw,op}=curStroke;
@@ -939,7 +939,7 @@ function drawCurStroke(){
   ctx2d.lineTo(points[points.length-1].x,points[points.length-1].y);
   ctx2d.stroke(); ctx2d.restore();
 }
-
+ 
 function drawPreview(start,end,tool){
   ctx2d.save(); ctx2d.strokeStyle=S.activeColor; ctx2d.lineWidth=S.strokeWidth;
   ctx2d.setLineDash([6,4]); ctx2d.globalAlpha=0.7; ctx2d.lineCap='round'; ctx2d.lineJoin='round';
@@ -956,7 +956,7 @@ function drawPreview(start,end,tool){
   }
   ctx2d.stroke(); ctx2d.restore();
 }
-
+ 
 function drawHead(from,to){
   const a=Math.atan2(to.y-from.y,to.x-from.x), L=14;
   ctx2d.moveTo(to.x,to.y);
@@ -964,7 +964,7 @@ function drawHead(from,to){
   ctx2d.moveTo(to.x,to.y);
   ctx2d.lineTo(to.x-L*Math.cos(a+0.4),to.y-L*Math.sin(a+0.4));
 }
-
+ 
 function drawCloud(ctx,s,e){
   const r=14, x1=Math.min(s.x,e.x),y1=Math.min(s.y,e.y);
   const x2=Math.max(s.x,e.x),y2=Math.max(s.y,e.y);
@@ -977,14 +977,14 @@ function drawCloud(ctx,s,e){
   for(let i=vs;i>0;i--) ctx.arc(x1,y1+h/vs*(i-.5),r/2,Math.PI/2,-Math.PI/2,false);
   ctx.closePath();
 }
-
+ 
 function redrawAll(){
   const r=vpEl.getBoundingClientRect();
   ctx2d.clearRect(0,0,r.width,r.height);
   S.strokes.forEach(st=>renderStroke(ctx2d,st));
   if(curStroke&&(curStroke.tool==='pencil'||curStroke.tool==='highlight')) drawCurStroke();
 }
-
+ 
 function renderStroke(ctx,st){
   ctx.save(); ctx.globalAlpha=st.op||1;
   ctx.strokeStyle=st.color||'#fff'; ctx.lineWidth=st.lw||2;
@@ -1026,13 +1026,13 @@ function renderStroke(ctx,st){
   }
   ctx.restore();
 }
-
+ 
 function pushStroke(st){
   S.undoStack.push(JSON.stringify(S.strokes));
   if(S.undoStack.length>50) S.undoStack.shift();
   S.strokes.push(st); autoSave(); redrawAll();
 }
-
+ 
 function openTextInput(pos){
   const ta=document.createElement('textarea');
   ta.className='floating-text'; ta.style.left=pos.x+'px'; ta.style.top=pos.y+'px';
@@ -1043,18 +1043,18 @@ function openTextInput(pos){
   });
   ta.addEventListener('keydown',e=>{if(e.key==='Escape')ta.remove();});
 }
-
+ 
 /* ── FILE LOADING ──────────────────────────────────────────── */
 const gltfLoader=new GLTFLoader();
 let S_zoomFactor=1;
 S.zoomFactor=1; // expose
-
+ 
 window.triggerFileOpen=function(type){
   const fi=document.getElementById('file-input');
   fi.accept=type==='dxf'?'.dxf':type==='glb'?'.glb,.gltf':'.glb,.gltf,.dxf';
   fi.value=''; fi.click();
 };
-
+ 
 window.handleFileSelect=function(file){
   if(!file)return;
   const ext=file.name.split('.').pop().toLowerCase();
@@ -1072,7 +1072,7 @@ window.handleFileSelect=function(file){
   };
   fr.readAsArrayBuffer(file);
   S.modelBlobURL = URL.createObjectURL(file);
-
+ 
   if(ext==='glb'||ext==='gltf'){
     if(ext==='gltf') showToast('Nota: .gltf puede tener archivos externos. Prefiere .glb','err');
     loadGLTF(file);
@@ -1080,13 +1080,13 @@ window.handleFileSelect=function(file){
   else if(ext==='dxf') loadDXF(file);
   else { showToast('Formato no soportado: '+ext,'err'); setProgress(0); }
 };
-
+ 
 function setProgress(p){
   const b=document.getElementById('progress-bar');
   b.style.width=p+'%';
   if(p===0||p>=100) setTimeout(()=>b.style.width='0%',400);
 }
-
+ 
 function loadGLTF(file){
   const url=URL.createObjectURL(file); setProgress(30);
   gltfLoader.load(url,gltf=>{
@@ -1103,7 +1103,7 @@ function loadGLTF(file){
   },p=>{if(p.total)setProgress(30+(p.loaded/p.total)*50);},
   err=>{showToast('Error al cargar GLB','err');console.error(err);setProgress(0);});
 }
-
+ 
 function normObj(obj, targetSize){
   const box=new THREE.Box3().setFromObject(obj);
   const size=box.getSize(new THREE.Vector3());
@@ -1113,7 +1113,7 @@ function normObj(obj, targetSize){
   const center=box.getCenter(new THREE.Vector3());
   obj.position.set(-center.x*s, 0, -center.z*s);
 }
-
+ 
 function loadDXF(file){
   const reader=new FileReader(); setProgress(20);
   reader.onload=async e=>{
@@ -1194,7 +1194,7 @@ function loadDXF(file){
         al.userData.layer=a.layer;
         group.add(al);
       });
-
+ 
       const box=new THREE.Box3().setFromObject(group);
       console.log('[DXF] Three.js group children:', group.children.length,
         'boundingBox empty:', box.isEmpty());
@@ -1211,7 +1211,7 @@ function loadDXF(file){
       const ctr=box.getCenter(new THREE.Vector3());
       // Center on all axes
       group.position.set(-ctr.x*sc,-ctr.y*sc,-ctr.z*sc);
-
+ 
       S.modelObj=group; scene.add(group);
       const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
       updateLayerPanel(layObjs.length?layObjs:[{name:'0',color:'#3b82f6',visible:true}]);
@@ -1222,7 +1222,7 @@ function loadDXF(file){
   };
   reader.readAsText(file);
 }
-
+ 
 function parseDXF(text){
   // ── 1. Tokenizar en pares (code, value) ──────────────────────
   const raw=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
@@ -1233,7 +1233,7 @@ function parseDXF(text){
   }
   const res={segments:[],circles:[],arcs:[],layers:[]};
   const lset=new Set();
-
+ 
   // ── 2. Leer sección BLOCKS ───────────────────────────────────
   const blocks={};
   let bi=0;
@@ -1257,7 +1257,7 @@ function parseDXF(text){
     }
     bi++;
   }
-
+ 
   // ── 3. Leer sección ENTITIES ─────────────────────────────────
   let ei=0, found=false;
   while(ei<P.length){
@@ -1271,15 +1271,15 @@ function parseDXF(text){
     if(P[ei][0]===0&&P[ei][1]==='ENDSEC') break;
     ei=readEntity(P,ei,res,lset,blocks);
   }
-
+ 
   res.layers=Array.from(lset);
   return res;
 }
-
+ 
 function readEntity(P,i,res,lset,blocks){
   if(P[i][0]!==0) return i+1;
   const type=P[i][1];
-
+ 
   // ── LINE ────────────────────────────────────────────────────
   if(type==='LINE'){
     i++; let x1=0,y1=0,z1=0,x2=0,y2=0,z2=0,layer='0';
@@ -1296,7 +1296,7 @@ function readEntity(P,i,res,lset,blocks){
     }
     return i;
   }
-
+ 
   // ── LWPOLYLINE / POLYLINE / SPLINE ──────────────────────────
   if(type==='LWPOLYLINE'||type==='POLYLINE'||type==='SPLINE'){
     i++; const pts=[]; let layer='0',closed=false,lx=null,ly=null,lz=0,elev=0;
@@ -1336,7 +1336,7 @@ function readEntity(P,i,res,lset,blocks){
     if(pts.length) lset.add(layer);
     return i;
   }
-
+ 
   // ── CIRCLE ──────────────────────────────────────────────────
   if(type==='CIRCLE'){
     i++; let cx=0,cy=0,cz=0,r=0,layer='0';
@@ -1349,7 +1349,7 @@ function readEntity(P,i,res,lset,blocks){
     if(r>0&&isFinite(cx)&&isFinite(cy)){res.circles.push({cx,cy,cz,r,layer});lset.add(layer);}
     return i;
   }
-
+ 
   // ── ARC ─────────────────────────────────────────────────────
   if(type==='ARC'){
     i++; let cx=0,cy=0,cz=0,r=0,sa=0,ea=360,layer='0';
@@ -1365,7 +1365,7 @@ function readEntity(P,i,res,lset,blocks){
     }
     return i;
   }
-
+ 
   // ── 3DFACE ──────────────────────────────────────────────────
   if(type==='3DFACE'){
     i++; let vs=[[0,0,0],[0,0,0],[0,0,0],[0,0,0]], layer='0';
@@ -1388,7 +1388,7 @@ function readEntity(P,i,res,lset,blocks){
     lset.add(layer);
     return i;
   }
-
+ 
   // ── INSERT (expansión de bloque) ─────────────────────────────
   if(type==='INSERT'){
     i++; let bname='',ix=0,iy=0,iz=0,sx=1,sy=1,sz_=1,rot=0,layer='0';
@@ -1429,13 +1429,13 @@ function readEntity(P,i,res,lset,blocks){
     }
     return i;
   }
-
+ 
   // Entidad no reconocida: saltar hasta el siguiente código 0
   i++;
   while(i<P.length&&P[i][0]!==0) i++;
   return i;
 }
-
+ 
 /* ── DEMO MODEL ───────────────────────────────────────────── */
 window.loadDemo=function(){
   document.getElementById('drop-zone').style.display='none';
@@ -1467,7 +1467,7 @@ window.loadDemo=function(){
   document.getElementById('sb-layers').innerHTML='<i class="ti ti-layers-difference"></i> 2 capas';
   zoomExtents(); showToast('Modelo demo cargado','ok');
 };
-
+ 
 /* ── CAMERA CONTROLS ──────────────────────────────────────── */
 window.zoomExtents=function(){
   if(!S.modelObj){camera.position.set(0,15,20);controls.target.set(0,0,0);controls.update();return;}
@@ -1505,7 +1505,7 @@ window.setMode=function(m){
   document.getElementById(`hbtn-${m}`)?.classList.add('active');
   if(m==='gps') updateARGPSPos();
 };
-
+ 
 /* ── TOOL SYSTEM ──────────────────────────────────────────── */
 window.setTool=function(id){
   S.activeTool=id;
@@ -1526,7 +1526,7 @@ window.setTool=function(id){
   document.getElementById('sb-tool').innerHTML=`<i class="ti ti-pencil"></i> ${id}`;
   window.closeAllMenus();
 };
-
+ 
 /* ── DRAW PROPS UI ────────────────────────────────────────── */
 const COLORS=['#ef4444','#f59e0b','#22c55e','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8'];
 const cpEl=document.getElementById('color-palette');
@@ -1555,7 +1555,7 @@ const ssEl=document.getElementById('stroke-sizes');
 });
 document.getElementById('stylus-only').addEventListener('change',e=>S.stylusOnly=e.target.checked);
 document.getElementById('pressure-mode').addEventListener('change',e=>S.pressureMode=e.target.checked);
-
+ 
 /* ── UNDO / REDO ──────────────────────────────────────────── */
 window.undoStroke=function(){
   if(!S.strokes.length){showToast('Nada que deshacer');return;}
@@ -1572,14 +1572,14 @@ window.clearDrawing=function(){
   S.undoStack.push(JSON.stringify(S.strokes));
   S.strokes=[]; redrawAll(); autoSave();
 };
-
+ 
 /* ── GPS ──────────────────────────────────────────────────── */
 function showGPSBanner(msg){
   const b=document.getElementById('gps-banner');
   b.textContent=msg; b.style.display='block';
   setTimeout(()=>b.style.display='none',5000);
 }
-
+ 
 window.toggleGPS=function(){
   if(S.gpsActive){
     if(S.gpsWatch!==null) navigator.geolocation.clearWatch(S.gpsWatch);
@@ -1599,7 +1599,7 @@ window.toggleGPS=function(){
   showToast('Solicitando permiso GPS…');
   document.getElementById('gps-dot').className='gps-dot';
   document.getElementById('hud-gps-text').textContent='Conectando…';
-
+ 
   const onSuccess=pos=>{
     S.gpsActive=true; S.gpsPos=pos.coords;
     const lat=pos.coords.latitude.toFixed(6);
@@ -1626,7 +1626,7 @@ window.toggleGPS=function(){
       document.getElementById('hud-bc').style.display='block';
     }
   };
-
+ 
   const onError=err=>{
     let msg='Error GPS';
     scheduleGPSRetry();
@@ -1637,7 +1637,7 @@ window.toggleGPS=function(){
     document.getElementById('gps-dot').className='gps-dot';
     document.getElementById('hud-gps-text').textContent='GPS error';
   };
-
+ 
   // Use getCurrentPosition first (faster) then watchPosition
   navigator.geolocation.getCurrentPosition(pos=>{
     onSuccess(pos);
@@ -1646,7 +1646,7 @@ window.toggleGPS=function(){
       {enableHighAccuracy:true,maximumAge:3000,timeout:20000});
   },onError,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
 };
-
+ 
 window.setProjectOrigin=function(){
   if(!S.gpsPos){showToast('Activa el GPS primero','err');return;}
   S.projectLat=S.gpsPos.latitude; S.projectLon=S.gpsPos.longitude;
@@ -1666,7 +1666,7 @@ function haversine(a,b,c,d){
   const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;
   return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
-
+ 
 // Compass — works on Chrome Android (deviceorientationabsolute) and
 // Brave/iOS (webkitCompassHeading on deviceorientation)
 function startCompass(){
@@ -1684,7 +1684,7 @@ function startCompass(){
   // Fallback for iOS/Brave (non-absolute)
   window.addEventListener('deviceorientation',handler,true);
 }
-
+ 
 if(typeof DeviceOrientationEvent!=='undefined'){
   // iOS 13+ requires permission
   if(typeof DeviceOrientationEvent.requestPermission==='function'){
@@ -1699,7 +1699,7 @@ if(typeof DeviceOrientationEvent!=='undefined'){
     startCompass();
   }
 }
-
+ 
 window.openGPSModal=function(){
   showModal(`<h3>Coordenadas del proyecto</h3>
     <label>Latitud</label><input id="ml-lat" value="${S.projectLat||''}">
@@ -1715,7 +1715,7 @@ window.applyGPSModal=function(){
   if(!isNaN(lat)&&!isNaN(lon)){S.projectLat=lat;S.projectLon=lon;}
   closeModal(); showToast('Coordenadas aplicadas','ok');
 };
-
+ 
 /* ── AR ───────────────────────────────────────────────────── */
 window.startARSurface=async function(){
   // Desktop: AR físico no es posible — ofrecer alternativa con cámara
@@ -1782,14 +1782,14 @@ window.startARSurface=async function(){
   btn.click(); setTimeout(()=>btn.remove(),1000);
   setMode('ar');
 };
-
+ 
 window.startARGPS=function(){
   if(!S.gpsActive){showToast('Activa el GPS primero','err');toggleGPS();return;}
   if(!S.modelObj){showToast('Carga un modelo primero','err');return;}
   setMode('gps'); showToast('AR GPS activo','ok');
   updateARGPSPos();
 };
-
+ 
 function updateARGPSPos(){
   if(S.currentMode!=='gps'||!S.modelObj||!S.gpsPos||S.projectLat===null)return;
   const R=6371000;
@@ -1801,7 +1801,7 @@ function updateARGPSPos(){
   if(S.heading!==null) S.modelObj.rotation.y=S.heading*Math.PI/180;
   setTimeout(updateARGPSPos,2000);
 }
-
+ 
 window.checkARSupport=async function(){
   const xr=navigator.xr;
   const platform = IS_DESKTOP ? '🖥 Escritorio (Windows/Mac/Linux)' :
@@ -1829,7 +1829,7 @@ window.checkARSupport=async function(){
   msg+='<div class="modal-btns"><button class="btn-sec" onclick="closeModal()">Cerrar</button></div>';
   showModal(msg);
 };
-
+ 
 /* ── CAPTURE ──────────────────────────────────────────────── */
 window.doScreenshot=async function(){
   renderer.render(scene,camera);
@@ -1888,7 +1888,7 @@ window.toggleScreenRecord=function(){
     }catch(e){showToast('Grabación no disponible: '+e.message,'err');}
   }
 };
-
+ 
 /* ── OBSERVATIONS ─────────────────────────────────────────── */
 window.addObservation=function(){
   showModal(`<h3>Nueva observación</h3>
@@ -1954,7 +1954,7 @@ window.exportObsPDF=function(){
   background:rgba(16,185,129,.3); border-color:#22c55e; color:#6ee7b7;
   box-shadow:0 0 0 2px rgba(34,197,94,.3);
 }
-
+ 
 /* Android performance optimizations */
 * { -webkit-overflow-scrolling: touch; }
 canvas { -webkit-transform: translateZ(0); transform: translateZ(0); }
@@ -1982,7 +1982,7 @@ window.exportKML=function(){
   a.href='data:application/vnd.google-earth.kml+xml,'+encodeURIComponent(kml); a.click();
   showToast(pins.length+' waypoints exportados','ok');
 };
-
+ 
 /* ── LAYERS ───────────────────────────────────────────────── */
 function updateLayerPanel(layers){
   S.layers=layers;
@@ -2030,11 +2030,11 @@ window.toggleLayer=function(name){
   updateLayerPanel(S.layers);
   showToast((l.visible?'✓ Capa visible: ':'○ Capa oculta: ')+name);
 };
-
+ 
 /* ── SAVE ─────────────────────────────────────────────────── */
 window.saveProject=function(){autoSave();showToast('Guardado','ok');document.getElementById('sb-save').innerHTML='<i class="ti ti-circle-check"></i> Guardado';};
 function autoSave(){localStorage.setItem('arplan_strokes',JSON.stringify(S.strokes));localStorage.setItem('arplan_obs',JSON.stringify(S.observations));}
-
+ 
 /* ── KEYBOARD ─────────────────────────────────────────────── */
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
@@ -2055,7 +2055,7 @@ document.addEventListener('keydown',e=>{
   if(k==='delete'||k==='backspace') undoStroke();
   if(k==='f') zoomExtents();
 });
-
+ 
 /* ── WHEEL ZOOM ───────────────────────────────────────────── */
 // Only listen on the THREE canvas (or viewport when not in draw mode)
 canvas3.addEventListener('wheel',e=>{
@@ -2070,8 +2070,8 @@ drawEl.addEventListener('wheel',e=>{
   const factor=e.deltaY>0?0.85:1.18;
   camera.zoom*=factor; camera.updateProjectionMatrix();
 },{passive:false});
-
-
+ 
+ 
 /* ============================================================
    PWA — Service Worker registration
 ============================================================ */
@@ -2093,7 +2093,7 @@ const SW_ALLOWED_ORIGINS = [
 const _swOriginOk = SW_ALLOWED_ORIGINS.some(o =>
   location.hostname === o || location.hostname.endsWith(o)
 );
-
+ 
 if ('serviceWorker' in navigator && _swOriginOk) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js')
@@ -2112,7 +2112,7 @@ if ('serviceWorker' in navigator && _swOriginOk) {
       .catch(err => console.warn('[SW] registration failed:', err));
   });
 }
-
+ 
 /* ============================================================
    HTTPS check
 ============================================================ */
@@ -2134,12 +2134,12 @@ if ('serviceWorker' in navigator && _swOriginOk) {
     document.body.prepend(banner);
   }
 })();
-
+ 
 /* ============================================================
    iOS detection helpers
 ============================================================ */
 /* Platform constants moved to top of module */
-
+ 
 /* ============================================================
    IndexedDB — guardar y recuperar modelos
 ============================================================ */
@@ -2147,7 +2147,7 @@ const DB_NAME    = 'arplan-db';
 const DB_VERSION = 1;
 const DB_STORE   = 'models';
 let _db = null;
-
+ 
 function openDB() {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
@@ -2159,7 +2159,7 @@ function openDB() {
     req.onerror   = () => reject(req.error);
   });
 }
-
+ 
 async function dbSaveModel(name, arrayBuffer) {
   try {
     const db = await openDB();
@@ -2176,7 +2176,7 @@ async function dbSaveModel(name, arrayBuffer) {
     return false;
   }
 }
-
+ 
 async function dbLoadModel(name) {
   try {
     const db = await openDB();
@@ -2191,7 +2191,7 @@ async function dbLoadModel(name) {
     return null;
   }
 }
-
+ 
 async function dbListModels() {
   try {
     const db = await openDB();
@@ -2203,12 +2203,12 @@ async function dbListModels() {
     });
   } catch (e) { return []; }
 }
-
+ 
 /* ============================================================
    DXF Web Worker integration
 ============================================================ */
 let dxfWorker = null;
-
+ 
 function getDXFWorker() {
   if (dxfWorker) return dxfWorker;
   /* Crear worker desde archivo separado */
@@ -2220,7 +2220,7 @@ function getDXFWorker() {
   }
   return dxfWorker;
 }
-
+ 
 function parseDXFInWorker(text) {
   return new Promise((resolve, reject) => {
     const worker = getDXFWorker();
@@ -2240,12 +2240,12 @@ function parseDXFInWorker(text) {
     worker.postMessage({ type: 'PARSE', text });
   });
 }
-
+ 
 /* Fallback DXF parser — usa la misma función readEntity que parseDXF */
 function parseDXFFallback(text) {
   return parseDXF(text);
 }
-
+ 
 /* ============================================================
    model-viewer iOS AR fallback
 ============================================================ */
@@ -2256,7 +2256,7 @@ function showModelViewerAR(blobURL) {
   document.getElementById('mv-container').style.display = 'block';
   showToast('AR Quick Look listo — toca "Ver en AR"', 'ok');
 }
-
+ 
 /* ============================================================
    Tutorial first-run
 ============================================================ */
@@ -2274,9 +2274,9 @@ const TUTORIAL_STEPS = [
   { icon:'ti-device-floppy',    title:'Guarda tu trabajo',
     text:'Ctrl+S guarda trazos y observaciones. El modelo 3D se guarda automáticamente en el dispositivo para la próxima sesión.' },
 ];
-
+ 
 let tutStep = 0;
-
+ 
 function showTutorial() {
   if (localStorage.getItem('arplan_tutorial_done')) return;
   tutStep = 0;
@@ -2284,7 +2284,7 @@ function showTutorial() {
   const overlay = document.getElementById('tutorial-overlay');
   overlay.style.display = 'flex';
 }
-
+ 
 function renderTutStep() {
   if (!TUTORIAL_STEPS || !TUTORIAL_STEPS.length) return;
   const s = TUTORIAL_STEPS[tutStep];
@@ -2294,7 +2294,7 @@ function renderTutStep() {
     `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
      background:${i===tutStep?'#3b82f6':'rgba(255,255,255,.2)'};margin:0 3px"></span>`
   ).join('');
-
+ 
   const stepsEl = document.getElementById('tutorial-steps');
   if (!stepsEl) return;
   stepsEl.innerHTML = `
@@ -2306,32 +2306,32 @@ function renderTutStep() {
       <div style="margin-top:16px">${dots}</div>
       <div style="font-size:11px;color:#6b7280;margin-top:6px">${tutStep+1} / ${total}</div>
     </div>`;
-
+ 
   const prevBtn = document.getElementById('tut-prev');
   const nextBtn = document.getElementById('tut-next');
   if (prevBtn) prevBtn.style.opacity = tutStep === 0 ? '0.3' : '1';
   if (nextBtn) nextBtn.textContent = tutStep === total - 1 ? 'Empezar' : 'Siguiente';
 }
-
+ 
 window.tutNav = function(dir) {
   const total = TUTORIAL_STEPS.length;
   const isLastStep = tutStep === total - 1;
-
+ 
   // On last step pressing "Siguiente/Empezar" → close tutorial
   if (dir > 0 && isLastStep) {
     closeTutorial();
     return;
   }
-
+ 
   tutStep = Math.max(0, Math.min(total - 1, tutStep + dir));
   renderTutStep();
 };
-
+ 
 window.closeTutorial = function() {
   localStorage.setItem('arplan_tutorial_done', '1');
   document.getElementById('tutorial-overlay').style.display = 'none';
 };
-
+ 
 /* ============================================================
    Compass dedicated button (iOS permission)
 ============================================================ */
@@ -2355,14 +2355,14 @@ window.requestCompassPermission = function() {
     showToast('Brújula activada', 'ok');
   }
 };
-
+ 
 /* ============================================================
    Two-finger zoom while in draw mode
 ============================================================ */
 (function setupTwoFingerZoom() {
   let lastPinchDist = null;
   let activeTouches = new Map();
-
+ 
   vpEl.addEventListener('touchstart', e => {
     for (const t of e.changedTouches) {
       activeTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
@@ -2372,7 +2372,7 @@ window.requestCompassPermission = function() {
       lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
     }
   }, { passive: true });
-
+ 
   vpEl.addEventListener('touchmove', e => {
     /* Only intercept when 2 fingers are active during a draw tool */
     if (e.touches.length < 2 || !DRAW_TOOLS.has(S.activeTool)) return;
@@ -2388,13 +2388,13 @@ window.requestCompassPermission = function() {
     }
     lastPinchDist = dist;
   }, { passive: true });
-
+ 
   vpEl.addEventListener('touchend', e => {
     for (const t of e.changedTouches) activeTouches.delete(t.identifier);
     if (activeTouches.size < 2) lastPinchDist = null;
   }, { passive: true });
 })();
-
+ 
 /* ============================================================
    Text tool — modal instead of floating textarea
 ============================================================ */
@@ -2414,7 +2414,7 @@ function openTextModal(pos) {
     </div>`);
   setTimeout(() => document.getElementById('text-modal-input')?.focus(), 100);
 }
-
+ 
 window.confirmTextModal = function(x, y) {
   const txt = document.getElementById('text-modal-input')?.value?.trim();
   const sz  = parseInt(document.getElementById('text-modal-size')?.value || '14', 10);
@@ -2424,14 +2424,14 @@ window.confirmTextModal = function(x, y) {
   }
   closeModal();
 };
-
+ 
 /* ============================================================
    GPS retry with exponential backoff
 ============================================================ */
 let gpsRetryTimer  = null;
 let gpsRetryCount  = 0;
 const GPS_MAX_RETRY = 4;
-
+ 
 function scheduleGPSRetry() {
   if (gpsRetryCount >= GPS_MAX_RETRY) {
     showToast('GPS: no se pudo obtener señal después de varios intentos', 'err');
@@ -2452,14 +2452,14 @@ function scheduleGPSRetry() {
     );
   }, delay);
 }
-
+ 
 /* ============================================================
    captureStream detection
 ============================================================ */
 function isScreenRecordSupported() {
   return typeof canvas3.captureStream === 'function';
 }
-
+ 
 /* ============================================================
    Scale calibration dialog
 ============================================================ */
@@ -2482,7 +2482,7 @@ window.openScaleCalibration = function() {
       <button class="btn-pri" onclick="applyScaleCalibration()">Aplicar</button>
     </div>`);
 };
-
+ 
 window.applyScaleCalibration = function() {
   const d = parseFloat(document.getElementById('cal-dist')?.value);
   if (isNaN(d) || d <= 0) { showToast('Distancia inválida', 'err'); return; }
@@ -2490,19 +2490,19 @@ window.applyScaleCalibration = function() {
   closeModal();
   showToast('Próxima medición calibrará la escala automáticamente');
 };
-
-
+ 
+ 
 /* ============================================================
    CAMERA PASSTHROUGH — cámara trasera + modelo 3D superpuesto
    Funciona en todos los navegadores móviles con HTTPS
    NO requiere WebXR — usa getUserMedia directamente
 ============================================================ */
 let _camStream = null;
-
+ 
 window.toggleCameraPassthrough = async function() {
   const video  = document.getElementById('cam-passthrough');
   const btn    = document.getElementById('cam-btn');
-
+ 
   // ── Apagar cámara ────────────────────────────────────────────
   if (_camStream) {
     _camStream.getTracks().forEach(t => t.stop());
@@ -2517,13 +2517,13 @@ window.toggleCameraPassthrough = async function() {
     showToast('Cámara desactivada');
     return;
   }
-
+ 
   // ── Verificar soporte ─────────────────────────────────────────
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     showToast('Cámara no disponible en este navegador', 'err');
     return;
   }
-
+ 
   // ── Intentar cámara trasera, con fallback a cualquier cámara ─
   const tryCamera = async (constraints) => {
     try {
@@ -2532,44 +2532,44 @@ window.toggleCameraPassthrough = async function() {
       return null;
     }
   };
-
+ 
   // Estrategia: intentar trasera exacta → trasera ideal → cualquier cámara
   let stream =
     await tryCamera({ video: { facingMode: { exact: 'environment' } } }) ||
     await tryCamera({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } }) ||
     await tryCamera({ video: { facingMode: 'environment' } }) ||
     await tryCamera({ video: true });
-
+ 
   if (!stream) {
     showToast('No se pudo acceder a la cámara. Verifica los permisos.', 'err');
     return;
   }
-
+ 
   try {
     _camStream = stream;
     video.srcObject = stream;
-
+ 
     // Android Chrome requiere play() explícito después de asignar srcObject
     video.muted   = true;  // obligatorio para autoplay en Android
     video.playsInline = true;
     await video.play().catch(() => {});  // silenciar error si ya está reproduciendo
-
+ 
     // Detectar si es cámara frontal para hacer mirror
     const track    = stream.getVideoTracks()[0];
     const settings = track ? track.getSettings() : {};
     video.style.transform = (settings.facingMode === 'user') ? 'scaleX(-1)' : 'scaleX(1)';
     video.style.display   = 'block';
-
+ 
     // ── Hacer Three.js canvas transparente ───────────────────────
     // Necesita las 3 líneas para funcionar en Android Chrome
     renderer.setClearColor(0x000000, 0);
     renderer.setClearAlpha(0);
     renderer.autoClearColor = false;
-
+ 
     btn.classList.add('active');
     btn.innerHTML = '<i class="ti ti-camera-off"></i> Apagar cámara';
     showToast('Cámara activa — modelo superpuesto', 'ok');
-
+ 
   } catch (err) {
     if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
     let msg = 'Error cámara: ' + (err.message || err.name);
@@ -2582,9 +2582,9 @@ window.toggleCameraPassthrough = async function() {
     showToast(msg, 'err');
   }
 };
-
-
-
+ 
+ 
+ 
 /* Demo DXF con bloques 3D — para verificar que el parser funciona */
 window.loadTestDXF = function() {
   const dxf = `  0\nSECTION\n  2\nBLOCKS\n  0\nBLOCK\n  8\n0\n  2\nEDIFICIO\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n0.0\n 30\n0.0\n 11\n10.0\n 21\n0.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n0.0\n 30\n0.0\n 11\n10.0\n 21\n8.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n8.0\n 30\n0.0\n 11\n0.0\n 21\n8.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n8.0\n 30\n0.0\n 11\n0.0\n 21\n0.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n0.0\n 30\n3.5\n 11\n10.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n0.0\n 30\n3.5\n 11\n10.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n8.0\n 30\n3.5\n 11\n0.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n8.0\n 30\n3.5\n 11\n0.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n0.0\n 30\n0.0\n 11\n0.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n0.0\n 30\n0.0\n 11\n10.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n8.0\n 30\n0.0\n 11\n10.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n8.0\n 30\n0.0\n 11\n0.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n0.0\n 30\n0.0\n 11\n5.0\n 21\n8.0\n 31\n0.0\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n0.0\n 30\n3.5\n 11\n5.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n0.0\n 30\n0.0\n 11\n5.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n8.0\n 30\n0.0\n 11\n5.0\n 21\n8.0\n 31\n3.5\n  0\nENDBLK\n  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES\n  0\nINSERT\n  8\n0\n  2\nEDIFICIO\n 10\n0.0\n 20\n0.0\n 30\n0.0\n 41\n1.0\n 42\n1.0\n 43\n1.0\n 50\n0.0\n  0\nINSERT\n  8\n0\n  2\nEDIFICIO\n 10\n15.0\n 20\n0.0\n 30\n0.0\n 41\n1.0\n 42\n1.0\n 43\n1.0\n 50\n45.0\n  0\nLINE\n  8\nEJES\n 10\n-2.0\n 20\n4.0\n 30\n0.0\n 11\n27.0\n 21\n4.0\n 31\n0.0\n  0\nENDSEC\n  0\nEOF`;
@@ -2626,7 +2626,7 @@ window.loadTestDXF = function() {
     setProgress(0);
   }
 };
-
+ 
 /* ── INIT ─────────────────────────────────────────────────── */
 resizeAll();
 setView('iso');
@@ -2634,7 +2634,7 @@ setView('iso');
 if(window.__moduleReady) window.__moduleReady();
 // Show tutorial on first run
 setTimeout(showTutorial, 800);
-
+ 
 // Try to restore last model from IndexedDB
 dbListModels().then(keys => {
   if (keys.length > 0) {
@@ -2642,7 +2642,7 @@ dbListModels().then(keys => {
     showToast('Modelo guardado disponible: ' + lastKey + ' — ver menú Archivo');
   }
 }).catch(() => {});
-
+ 
 showToast('ARPlan Pro listo — arrastra un archivo GLB, GLTF o DXF','ok');
 </script>
 </body>
