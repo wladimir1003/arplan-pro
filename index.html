@@ -382,6 +382,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
 
 <!-- ===== VIEWPORT ===== -->
 <div id="viewport">
+  <video id="cam-passthrough" playsinline autoplay muted></video>
   <canvas id="three-canvas"></canvas>
   <canvas id="draw-canvas"></canvas>
   <!-- GPS banner -->
@@ -400,6 +401,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     </div>
     <div id="hud-bl"><div class="hud-pill mono" id="hud-xyz">X:— Y:—</div></div>
     <div id="hud-br">
+      <button id="cam-btn" onclick="toggleCameraPassthrough()" title="Cámara + plano">
+        <i class="ti ti-camera"></i> Cámara + Plano
+      </button>
       <div class="zoom-cluster">
         <button class="zoom-btn" onclick="zoomIn()" aria-label="Zoom in">+</button>
         <div class="zoom-val" id="hud-zoom">1.0x</div>
@@ -421,7 +425,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     <p>Arrastra un archivo aquí o selecciónalo</p>
     <p style="font-size:11px;color:var(--text-tert)">GLB · GLTF · DXF</p>
     <button class="dz-btn" onclick="triggerFileOpen()"><i class="ti ti-folder-open"></i> Seleccionar archivo</button>
-    <button class="dz-ghost" onclick="loadDemo()">Modelo demo</button>
+    <button class="dz-ghost" onclick="loadDemo()">Demo 3D (muros)</button>
+    <button class="dz-ghost" onclick="loadTestDXF()">Demo DXF con bloques</button>
   </div>
   <input type="file" id="file-input" accept=".glb,.gltf,.dxf" onchange="handleFileSelect(this.files[0])">
 </div>
@@ -1105,21 +1110,39 @@ function loadDXF(file){
       }
       setProgress(70);
       const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length;
+      // DEBUG: log parsing results to browser console
+      console.log('[DXF] Parsed result:',{
+        segments: parsed.segments.length,
+        circles:  parsed.circles.length,
+        arcs:     parsed.arcs.length,
+        layers:   parsed.layers,
+        sample3D: parsed.segments.filter(s=>(s.z1||0)!==0||(s.z2||0)!==0).length,
+        firstSeg: parsed.segments[0] || null
+      });
       if(!total){ showToast('DXF sin geometría legible','err'); setProgress(0); return; }
       if(S.modelObj) scene.remove(S.modelObj);
       const group=new THREE.Group();
-      const LC=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#f97316'];
-      const LM={}; let ci=0;
-      parsed.layers.forEach(n=>{ LM[n]=LC[ci++%LC.length]; });
-      const mat=l=>new THREE.LineBasicMaterial({color:LM[l]||'#3b82f6'});
-
+      const _DXF_COLORS=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+      const LM={}; let _ci=0;
+      parsed.layers.forEach(n=>{ LM[n]=_DXF_COLORS[_ci++%_DXF_COLORS.length]; });
+      const _matCache={};
+      const mat=layer=>{
+        if(!_matCache[layer]){
+          _matCache[layer]=new THREE.LineBasicMaterial({color:LM[layer]||'#3b82f6'});
+        }
+        return _matCache[layer];
+      };
+      let segAdded=0, segSkipped=0;
       parsed.segments.forEach(s=>{
         // DXF axis → Three.js axis: DXF_X→X, DXF_Z→Y(height), DXF_Y→Z(depth)
-        const g=new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(s.x1, s.z1||0, s.y1),
-          new THREE.Vector3(s.x2, s.z2||0, s.y2)]);
+        const p1=new THREE.Vector3(s.x1, s.z1||0, s.y1);
+        const p2=new THREE.Vector3(s.x2, s.z2||0, s.y2);
+        if(p1.distanceTo(p2)<1e-10){ segSkipped++; return; }
+        const g=new THREE.BufferGeometry().setFromPoints([p1,p2]);
         group.add(new THREE.Line(g,mat(s.layer)));
+        segAdded++;
       });
+      console.log('[DXF] Segments added:', segAdded, 'skipped (zero-length):', segSkipped);
       parsed.circles.forEach(c=>{
         const pts=[], N=Math.max(32,Math.floor(c.r*4));
         const cz=c.cz||0;
@@ -1143,6 +1166,13 @@ function loadDXF(file){
       });
 
       const box=new THREE.Box3().setFromObject(group);
+      console.log('[DXF] Three.js group children:', group.children.length,
+        'boundingBox empty:', box.isEmpty());
+      if(!box.isEmpty()){
+        const dbgSz=box.getSize(new THREE.Vector3());
+        console.log('[DXF] BBox size:', {x:dbgSz.x.toFixed(2),y:dbgSz.y.toFixed(2),z:dbgSz.z.toFixed(2)},
+          'center:', box.getCenter(new THREE.Vector3()));
+      }
       if(box.isEmpty()){showToast('No se pudo calcular bounding box','err');setProgress(0);return;}
       const sz=box.getSize(new THREE.Vector3());
       // Include all 3 axes in scale calculation
@@ -1809,7 +1839,17 @@ window.exportObsPDF=function(){
   win.document.write(`<!DOCTYPE html><html><head><title>Informe Campo</title>
     <style>body{font-family:sans-serif;max-width:800px;margin:30px auto;font-size:13px}
     h1{font-size:18px;border-bottom:2px solid #3b82f6;padding-bottom:8px}
-    .obs{border:1px solid #ccc;padding:12px;margin:10px 0;border-radius:4px;border-left:4px solid #f59e0b}</style>
+    .obs{border:1px solid #ccc;padding:12px;margin:10px 0;border-radius:4px;border-left:4px solid #f59e0b}
+/* ── Camera passthrough ── */
+#cam-passthrough{position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;z-index:0;display:none;}
+#cam-btn{position:absolute;bottom:52px;right:8px;z-index:25;
+  background:rgba(0,0,0,.65);border:.5px solid rgba(255,255,255,.2);
+  border-radius:8px;color:#b0c8ff;font-size:13px;padding:7px 12px;
+  cursor:pointer;pointer-events:all;display:flex;align-items:center;gap:6px;
+  white-space:nowrap;font-family:inherit;}
+#cam-btn.active{background:rgba(16,185,129,.3);border-color:#22c55e;color:#6ee7b7;}
+</style>
     </head><body><h1>Informe de Observaciones — ARPlan Pro</h1>
     <p><b>Proyecto:</b> ${S.fileName||'—'} | <b>Fecha:</b> ${new Date().toLocaleString()}</p>
     ${S.observations.map(o=>`<div class="obs"><b>${o.id}: ${o.title||''}</b><p>${o.desc||''}</p>
@@ -2305,6 +2345,117 @@ window.applyScaleCalibration = function() {
   S.calibratedMeters = d;
   closeModal();
   showToast('Próxima medición calibrará la escala automáticamente');
+};
+
+
+/* ============================================================
+   CAMERA PASSTHROUGH — cámara trasera + modelo 3D superpuesto
+   Funciona en todos los navegadores móviles con HTTPS
+   NO requiere WebXR — usa getUserMedia directamente
+============================================================ */
+let _camStream = null;
+
+window.toggleCameraPassthrough = async function() {
+  const video  = document.getElementById('cam-passthrough');
+  const btn    = document.getElementById('cam-btn');
+  const canvas = document.getElementById('three-canvas');
+
+  if (_camStream) {
+    // Apagar cámara
+    _camStream.getTracks().forEach(t => t.stop());
+    _camStream = null;
+    video.style.display = 'none';
+    video.srcObject = null;
+    canvas.style.background = '';
+    renderer.setClearColor(0x000000, 0);
+    btn.classList.remove('active');
+    btn.innerHTML = '<i class="ti ti-camera"></i> Cámara + Plano';
+    showToast('Cámara desactivada');
+    return;
+  }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Cámara no disponible en este dispositivo/navegador', 'err');
+    return;
+  }
+
+  try {
+    // Preferir cámara trasera para uso en campo
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    };
+    _camStream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = _camStream;
+    video.style.display = 'block';
+    // No hacer mirror en cámara trasera
+    const track = _camStream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    video.style.transform = settings.facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+
+    // Hacer el canvas de Three.js transparente para ver la cámara detrás
+    renderer.setClearColor(0x000000, 0);
+    canvas.style.background = 'transparent';
+
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="ti ti-camera-off"></i> Apagar cámara';
+    showToast('Cámara activada — modelo superpuesto', 'ok');
+
+  } catch (err) {
+    _camStream = null;
+    let msg = 'Error al acceder a la cámara';
+    if (err.name === 'NotAllowedError')
+      msg = 'Permiso de cámara denegado. Permite el acceso en la barra del navegador.';
+    else if (err.name === 'NotFoundError')
+      msg = 'No se encontró cámara en este dispositivo.';
+    else if (err.name === 'NotReadableError')
+      msg = 'La cámara está en uso por otra app.';
+    showToast(msg, 'err');
+  }
+};
+
+
+/* Demo DXF con bloques 3D — para verificar que el parser funciona */
+window.loadTestDXF = function() {
+  const dxf = `  0\nSECTION\n  2\nBLOCKS\n  0\nBLOCK\n  8\n0\n  2\nEDIFICIO\n 10\n0.0\n 20\n0.0\n 30\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n0.0\n 30\n0.0\n 11\n10.0\n 21\n0.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n0.0\n 30\n0.0\n 11\n10.0\n 21\n8.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n8.0\n 30\n0.0\n 11\n0.0\n 21\n8.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n8.0\n 30\n0.0\n 11\n0.0\n 21\n0.0\n 31\n0.0\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n0.0\n 30\n3.5\n 11\n10.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n0.0\n 30\n3.5\n 11\n10.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n8.0\n 30\n3.5\n 11\n0.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n8.0\n 30\n3.5\n 11\n0.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n0.0\n 30\n0.0\n 11\n0.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n0.0\n 30\n0.0\n 11\n10.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n10.0\n 20\n8.0\n 30\n0.0\n 11\n10.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nMUROS\n 10\n0.0\n 20\n8.0\n 30\n0.0\n 11\n0.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n0.0\n 30\n0.0\n 11\n5.0\n 21\n8.0\n 31\n0.0\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n0.0\n 30\n3.5\n 11\n5.0\n 21\n8.0\n 31\n3.5\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n0.0\n 30\n0.0\n 11\n5.0\n 21\n0.0\n 31\n3.5\n  0\nLINE\n  8\nDIVISON\n 10\n5.0\n 20\n8.0\n 30\n0.0\n 11\n5.0\n 21\n8.0\n 31\n3.5\n  0\nENDBLK\n  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES\n  0\nINSERT\n  8\n0\n  2\nEDIFICIO\n 10\n0.0\n 20\n0.0\n 30\n0.0\n 41\n1.0\n 42\n1.0\n 43\n1.0\n 50\n0.0\n  0\nINSERT\n  8\n0\n  2\nEDIFICIO\n 10\n15.0\n 20\n0.0\n 30\n0.0\n 41\n1.0\n 42\n1.0\n 43\n1.0\n 50\n45.0\n  0\nLINE\n  8\nEJES\n 10\n-2.0\n 20\n4.0\n 30\n0.0\n 11\n27.0\n 21\n4.0\n 31\n0.0\n  0\nENDSEC\n  0\nEOF`;
+  document.getElementById('drop-zone').style.display = 'none';
+  S.fileName = 'test_bloques_3d.dxf';
+  document.getElementById('title-bar').textContent = 'ARPlan Pro · test_bloques_3d.dxf';
+  document.getElementById('sb-file').innerHTML = '<i class="ti ti-file"></i> test_bloques_3d.dxf';
+  setProgress(10);
+  try {
+    const parsed = parseDXF(dxf);
+    console.log('[TestDXF] Parsed:', parsed);
+    if (S.modelObj) scene.remove(S.modelObj);
+    const group = new THREE.Group();
+    const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+    const LM = {}; let ci = 0;
+    parsed.layers.forEach(n => { LM[n] = COLORS[ci++ % COLORS.length]; });
+    const mat = l => new THREE.LineBasicMaterial({ color: LM[l] || '#3b82f6' });
+    parsed.segments.forEach(s => {
+      const p1 = new THREE.Vector3(s.x1, s.z1||0, s.y1);
+      const p2 = new THREE.Vector3(s.x2, s.z2||0, s.y2);
+      if (p1.distanceTo(p2) < 1e-10) return;
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1,p2]), mat(s.layer)));
+    });
+    const box = new THREE.Box3().setFromObject(group);
+    const sz  = box.getSize(new THREE.Vector3());
+    const sc  = 40 / Math.max(sz.x, sz.y, sz.z, 0.001);
+    group.scale.setScalar(sc);
+    const ctr = box.getCenter(new THREE.Vector3());
+    group.position.set(-ctr.x*sc, -ctr.y*sc, -ctr.z*sc);
+    S.modelObj = group; scene.add(group);
+    updateLayerPanel(parsed.layers.map(n => ({ name:n, color:LM[n]||'#3b82f6', visible:true })));
+    setProgress(0); zoomExtents();
+    showToast(`Demo DXF 3D: ${parsed.segments.length} segmentos en ${parsed.layers.length} capas`, 'ok');
+  } catch(e) {
+    console.error(e);
+    showToast('Error en demo DXF: ' + e.message, 'err');
+    setProgress(0);
+  }
 };
 
 /* ── INIT ─────────────────────────────────────────────────── */
