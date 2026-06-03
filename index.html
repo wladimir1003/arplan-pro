@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0,viewport-fit=cover,user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -428,7 +428,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
     <button class="dz-ghost" onclick="loadDemo()">Demo 3D (muros)</button>
     <button class="dz-ghost" onclick="loadTestDXF()">Demo DXF con bloques</button>
   </div>
-  <input type="file" id="file-input" accept=".glb,.gltf,.dxf" onchange="handleFileSelect(this.files[0])">
+  <input type="file" id="file-input" accept=".glb,.gltf,.dxf" onchange="handleFileSelect(this.files[0])"><input type="file" id="cam-capture-input" accept="image/*" capture="environment" style="display:none" onchange="handleCamCapture(this)">
 </div>
 
 <!-- ===== RIGHT PANEL ===== -->
@@ -673,8 +673,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:#111827;
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ARButton } from 'three/addons/webxr/ARButton.js';
+import { GLTFLoader }    from 'three/addons/loaders/GLTFLoader.js';
+import { ARButton }      from 'three/addons/webxr/ARButton.js';
+
+/* ── Platform detection — MUST be first, used by renderer init ── */
+const IS_IOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_SAFARI  = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const IS_MOBILE  = IS_IOS || IS_ANDROID ||
+                   /Mobi|Tablet|Touch/i.test(navigator.userAgent);
+const IS_DESKTOP = !IS_MOBILE;
 
 /* ── STATE ─────────────────────────────────────────────────── */
 const S = {
@@ -698,13 +707,15 @@ const vpEl   = document.getElementById('viewport');
 const canvas3 = document.getElementById('three-canvas');
 
 const renderer = new THREE.WebGLRenderer({
-  canvas:canvas3, antialias:true, alpha:true, preserveDrawingBuffer:true
+  canvas:canvas3, antialias:true, alpha:true, premultipliedAlpha:false,
+  preserveDrawingBuffer:true
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_MOBILE ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.xr.enabled = true;
+renderer.setClearColor(0x0d1117, 1); // match background color
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55,1,0.01,2000);
@@ -712,18 +723,22 @@ camera.position.set(0,15,20);
 
 // OrbitControls — must use the THREE canvas, not the draw canvas
 const controls = new OrbitControls(camera, canvas3);
-controls.enableDamping   = true;
-controls.dampingFactor   = 0.08;
+controls.enableDamping    = true;
+controls.dampingFactor    = 0.1;
 controls.screenSpacePanning = true;
-controls.enableZoom      = true;
-controls.zoomSpeed       = 1.2;
-controls.rotateSpeed     = 0.8;
-controls.panSpeed        = 0.8;
-// Touch gestures: one finger = rotate, two fingers = pan/zoom
+controls.enableZoom       = true;
+controls.zoomSpeed        = 1.5;
+controls.rotateSpeed      = 1.0;
+controls.panSpeed         = 1.0;
+controls.minDistance      = 0.5;
+controls.maxDistance      = 500;
+// Touch: one finger rotate, two fingers pan+zoom
 controls.touches = {
   ONE: THREE.TOUCH.ROTATE,
   TWO: THREE.TOUCH.DOLLY_PAN,
 };
+// Reduce damping lag on mobile for more responsive feel
+if(IS_MOBILE) { controls.dampingFactor = 0.15; controls.rotateSpeed = 0.7; }
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const dL = new THREE.DirectionalLight(0xffffff,1.2);
@@ -1139,10 +1154,16 @@ function loadDXF(file){
         const p2=new THREE.Vector3(s.x2, s.z2||0, s.y2);
         if(p1.distanceTo(p2)<1e-10){ segSkipped++; return; }
         const g=new THREE.BufferGeometry().setFromPoints([p1,p2]);
-        group.add(new THREE.Line(g,mat(s.layer)));
+        const ln=new THREE.Line(g,mat(s.layer));
+        ln.userData.layer=s.layer; // store for toggleLayer
+        group.add(ln);
         segAdded++;
       });
       console.log('[DXF] Segments added:', segAdded, 'skipped (zero-length):', segSkipped);
+      // Warn if too many segments for mobile
+      if(segAdded > 50000 && IS_MOBILE){
+        showToast('Modelo grande (' + segAdded + ' segmentos) — puede ir lento en móvil','err');
+      }
       parsed.circles.forEach(c=>{
         const pts=[], N=Math.max(32,Math.floor(c.r*4));
         const cz=c.cz||0;
@@ -1150,7 +1171,9 @@ function loadDXF(file){
           const a=i/N*Math.PI*2;
           pts.push(new THREE.Vector3(c.cx+Math.cos(a)*c.r, cz, c.cy+Math.sin(a)*c.r));
         }
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(c.layer)));
+        const cl=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(c.layer));
+        cl.userData.layer=c.layer;
+        group.add(cl);
       });
       parsed.arcs.forEach(a=>{
         const pts=[];
@@ -1162,7 +1185,9 @@ function loadDXF(file){
           const ang=s0+(e0-s0)*i/N;
           pts.push(new THREE.Vector3(a.cx+Math.cos(ang)*a.r, az, a.cy+Math.sin(ang)*a.r));
         }
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(a.layer)));
+        const al=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(a.layer));
+        al.userData.layer=a.layer;
+        group.add(al);
       });
 
       const box=new THREE.Box3().setFromObject(group);
@@ -1612,7 +1637,7 @@ window.toggleGPS=function(){
     onSuccess(pos);
     // Then start watching
     S.gpsWatch=navigator.geolocation.watchPosition(onSuccess,onError,
-      {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
+      {enableHighAccuracy:true,maximumAge:3000,timeout:20000});
   },onError,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
 };
 
@@ -1687,15 +1712,58 @@ window.applyGPSModal=function(){
 
 /* ── AR ───────────────────────────────────────────────────── */
 window.startARSurface=async function(){
-  if(!navigator.xr){showToast('WebXR no disponible — usa Chrome en Android','err');return;}
+  // Desktop: AR físico no es posible — ofrecer alternativa con cámara
+  if(IS_DESKTOP){
+    showModal(`<h3>AR no disponible en escritorio</h3>
+      <p style="font-size:13px;color:var(--text-sec);line-height:1.7;margin-bottom:10px">
+        La Realidad Aumentada requiere un dispositivo móvil con cámara trasera.<br><br>
+        <b>En escritorio puedes usar:</b><br>
+        📷 <b>Cámara + Plano</b> — superpone el modelo sobre la cámara web<br>
+        🖥 <b>Vista 3D</b> — visor orbital completo con zoom y rotación<br><br>
+        <b>Para AR real, abre esta misma URL en:</b><br>
+        📱 Android Chrome 81+ (con ARCore instalado)<br>
+        🍎 iOS Safari 12+ (AR Quick Look automático)
+      </p>
+      <div class="modal-btns">
+        <button class="btn-sec" onclick="closeModal()">Cerrar</button>
+        <button class="btn-pri" onclick="closeModal();toggleCameraPassthrough()">
+          <i class="ti ti-camera"></i> Abrir cámara + plano
+        </button>
+      </div>`);
+    return;
+  }
+  if(!navigator.xr){
+    if(IS_IOS){
+      if(S.modelBlobURL){ showModelViewerAR(S.modelBlobURL); }
+      else { showToast('Carga un modelo GLB primero para AR en iOS','err'); }
+    } else {
+      showToast('WebXR no disponible — usa Chrome 81+ en Android','err');
+    }
+    return;
+  }
   const ok=await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
   if(!ok){
     if(IS_IOS && S.modelBlobURL){
       showModelViewerAR(S.modelBlobURL);
     } else if(IS_IOS){
-      showToast('iOS: carga un modelo GLB primero para usar AR Quick Look','err');
+      showToast('iOS: carga un modelo GLB primero para AR Quick Look','err');
+    } else if(IS_ANDROID){
+      showModal(`<h3>ARCore requerido</h3>
+        <p style="font-size:13px;color:var(--text-sec);line-height:1.7">
+          Tu dispositivo Android necesita ARCore para la AR de superficie.<br><br>
+          <b>Solución:</b> Instala <b>Google Play Services para AR</b> desde la Play Store,
+          luego vuelve a intentarlo.<br><br>
+          Mientras tanto puedes usar <b>AR GPS</b> que no requiere ARCore.
+        </p>
+        <div class="modal-btns">
+          <button class="btn-sec" onclick="closeModal()">Cerrar</button>
+          <button class="btn-pri" onclick="closeModal();
+            window.open('https://play.google.com/store/apps/details?id=com.google.ar.core','_blank')">
+            Instalar ARCore
+          </button>
+        </div>`);
     } else {
-      showToast('AR no soportada — requiere Chrome + ARCore en Android','err');
+      showToast('AR de superficie no soportada en este dispositivo','err');
     }
     return;
   }
@@ -1730,16 +1798,28 @@ function updateARGPSPos(){
 
 window.checkARSupport=async function(){
   const xr=navigator.xr;
-  let msg='<h3>Compatibilidad del dispositivo</h3>';
-  if(!xr) msg+='<p style="color:var(--danger)">✗ WebXR no disponible (usa Chrome 81+ en Android)</p>';
-  else{
+  const platform = IS_DESKTOP ? '🖥 Escritorio (Windows/Mac/Linux)' :
+                   IS_IOS     ? '🍎 iOS (iPhone/iPad)' :
+                   IS_ANDROID ? '📱 Android' : '📱 Móvil';
+  let msg=`<h3>Compatibilidad del dispositivo</h3>
+    <p style="font-size:12px;color:var(--text-tert);margin-bottom:10px">${platform}</p>`;
+  if(IS_DESKTOP){
+    msg+='<p style="color:var(--text-tert)">⊘ AR Superficie — no disponible en escritorio<br><span style="font-size:11px">Requiere dispositivo móvil con cámara trasera</span></p>';
+  } else if(!xr){
+    msg+='<p style="color:var(--danger)">✗ WebXR no disponible — usa Chrome 81+ en Android</p>';
+  } else {
     const ar=await xr.isSessionSupported('immersive-ar').catch(()=>false);
-    msg+=ar?'<p style="color:var(--success)">✓ AR Superficie soportada</p>'
-           :'<p style="color:var(--warning)">⚠ AR Superficie no soportada (requiere ARCore)</p>';
+    msg+=ar
+      ?'<p style="color:var(--success)">✓ AR Superficie (WebXR) soportada</p>'
+      :'<p style="color:var(--warning)">⚠ AR Superficie no soportada<br><span style="font-size:11px">'+(IS_ANDROID?'Instala Google Play Services para AR (ARCore)':'Requiere Android Chrome + ARCore')+'</span></p>';
   }
+  msg+='<p style="color:var(--success)">✓ AR GPS — disponible en todos los dispositivos</p>';
+  const hasCam=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+  msg+=hasCam?'<p style="color:var(--success)">✓ Cámara + Plano disponible</p>':'<p style="color:var(--warning)">⚠ Cámara no disponible</p>';
   msg+=navigator.geolocation?'<p style="color:var(--success)">✓ GPS disponible</p>':'<p style="color:var(--danger)">✗ GPS no disponible</p>';
-  msg+=window.DeviceOrientationEvent?'<p style="color:var(--success)">✓ Brújula/giroscopio disponible</p>':'<p style="color:var(--warning)">⚠ Sin brújula detectada</p>';
-  msg+=`<p style="font-size:10px;color:var(--text-tert);margin-top:8px">${navigator.userAgent.substring(0,100)}</p>`;
+  msg+=window.DeviceOrientationEvent?'<p style="color:var(--success)">✓ Brújula/giroscopio disponible</p>':'<p style="color:var(--warning)">⚠ Brújula no detectada</p>';
+  if(IS_DESKTOP) msg+='<p style="color:var(--text-tert);font-size:11px;margin-top:8px">💡 En escritorio usa Vista 3D + Cámara + Plano como alternativa al AR</p>';
+  msg+=`<p style="font-size:10px;color:var(--text-tert);margin-top:8px;word-break:break-all">${navigator.userAgent.substring(0,120)}</p>`;
   msg+='<div class="modal-btns"><button class="btn-sec" onclick="closeModal()">Cerrar</button></div>';
   showModal(msg);
 };
@@ -1841,14 +1921,33 @@ window.exportObsPDF=function(){
     h1{font-size:18px;border-bottom:2px solid #3b82f6;padding-bottom:8px}
     .obs{border:1px solid #ccc;padding:12px;margin:10px 0;border-radius:4px;border-left:4px solid #f59e0b}
 /* ── Camera passthrough ── */
-#cam-passthrough{position:absolute;inset:0;width:100%;height:100%;
-  object-fit:cover;z-index:0;display:none;}
+#cam-passthrough{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  z-index:0;          /* behind Three.js canvas */
+  display:none;
+  background:#000;
+}
+/* Three.js canvas must be above video but transparent when camera is on */
+#three-canvas{z-index:1;}
+/* Draw canvas always on top */
+#draw-canvas{z-index:2;}
 #cam-btn{position:absolute;bottom:52px;right:8px;z-index:25;
   background:rgba(0,0,0,.65);border:.5px solid rgba(255,255,255,.2);
   border-radius:8px;color:#b0c8ff;font-size:13px;padding:7px 12px;
   cursor:pointer;pointer-events:all;display:flex;align-items:center;gap:6px;
   white-space:nowrap;font-family:inherit;}
 #cam-btn.active{background:rgba(16,185,129,.3);border-color:#22c55e;color:#6ee7b7;}
+
+/* Android performance optimizations */
+* { -webkit-overflow-scrolling: touch; }
+canvas { -webkit-transform: translateZ(0); transform: translateZ(0); }
+#viewport { -webkit-transform: translateZ(0); }
+/* Prevent text selection during touch interaction */
+#left-palette, #toolbar, #hud { -webkit-user-select: none; user-select: none; }
+/* Better tap highlight removal */
+a, button, [onclick] { -webkit-tap-highlight-color: transparent; }
 </style>
     </head><body><h1>Informe de Observaciones — ARPlan Pro</h1>
     <p><b>Proyecto:</b> ${S.fileName||'—'} | <b>Fecha:</b> ${new Date().toLocaleString()}</p>
@@ -1881,8 +1980,26 @@ function updateLayerPanel(layers){
     </div>`).join('');
 }
 window.toggleLayer=function(name){
-  const l=S.layers.find(x=>x.name===name); if(l) l.visible=!l.visible;
+  const l=S.layers.find(x=>x.name===name);
+  if(!l) return;
+  l.visible=!l.visible;
+  // Apply visibility to Three.js objects that belong to this layer
+  if(S.modelObj){
+    S.modelObj.traverse(obj=>{
+      // Three.js Lines store layer name in userData if we set it,
+      // otherwise match by material color
+      if(obj.isLine || obj.isMesh){
+        const mat=obj.material;
+        if(!mat) return;
+        // We store layer on the object's userData when building
+        if(obj.userData.layer===name){
+          obj.visible=l.visible;
+        }
+      }
+    });
+  }
   updateLayerPanel(S.layers);
+  showToast((l.visible?'Capa visible: ':'Capa oculta: ')+name);
 };
 
 /* ── SAVE ─────────────────────────────────────────────────── */
@@ -1930,7 +2047,7 @@ drawEl.addEventListener('wheel',e=>{
    PWA — Service Worker registration
 ============================================================ */
 // Version stamp — bump this string to reset localStorage on update
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 if (localStorage.getItem('arplan_version') !== APP_VERSION) {
   // Clear tutorial flag so it shows fresh on new version
   localStorage.removeItem('arplan_tutorial_done');
@@ -1992,9 +2109,7 @@ if ('serviceWorker' in navigator && _swOriginOk) {
 /* ============================================================
    iOS detection helpers
 ============================================================ */
-const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+/* Platform constants moved to top of module */
 
 /* ============================================================
    IndexedDB — guardar y recuperar modelos
@@ -2358,64 +2473,87 @@ let _camStream = null;
 window.toggleCameraPassthrough = async function() {
   const video  = document.getElementById('cam-passthrough');
   const btn    = document.getElementById('cam-btn');
-  const canvas = document.getElementById('three-canvas');
 
+  // ── Apagar cámara ────────────────────────────────────────────
   if (_camStream) {
-    // Apagar cámara
     _camStream.getTracks().forEach(t => t.stop());
     _camStream = null;
-    video.style.display = 'none';
     video.srcObject = null;
-    canvas.style.background = '';
-    renderer.setClearColor(0x000000, 0);
+    video.style.display = 'none';
+    // Restaurar fondo oscuro del renderer
+    renderer.setClearColor(0x0d1117, 1);
+    renderer.autoClearColor = true;
     btn.classList.remove('active');
     btn.innerHTML = '<i class="ti ti-camera"></i> Cámara + Plano';
     showToast('Cámara desactivada');
     return;
   }
 
+  // ── Verificar soporte ─────────────────────────────────────────
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast('Cámara no disponible en este dispositivo/navegador', 'err');
+    showToast('Cámara no disponible en este navegador', 'err');
+    return;
+  }
+
+  // ── Intentar cámara trasera, con fallback a cualquier cámara ─
+  const tryCamera = async (constraints) => {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch(e) {
+      return null;
+    }
+  };
+
+  // Estrategia: intentar trasera exacta → trasera ideal → cualquier cámara
+  let stream =
+    await tryCamera({ video: { facingMode: { exact: 'environment' } } }) ||
+    await tryCamera({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } }) ||
+    await tryCamera({ video: { facingMode: 'environment' } }) ||
+    await tryCamera({ video: true });
+
+  if (!stream) {
+    showToast('No se pudo acceder a la cámara. Verifica los permisos.', 'err');
     return;
   }
 
   try {
-    // Preferir cámara trasera para uso en campo
-    const constraints = {
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 }
-      }
-    };
-    _camStream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = _camStream;
-    video.style.display = 'block';
-    // No hacer mirror en cámara trasera
-    const track = _camStream.getVideoTracks()[0];
-    const settings = track.getSettings();
-    video.style.transform = settings.facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+    _camStream = stream;
+    video.srcObject = stream;
 
-    // Hacer el canvas de Three.js transparente para ver la cámara detrás
+    // Android Chrome requiere play() explícito después de asignar srcObject
+    video.muted   = true;  // obligatorio para autoplay en Android
+    video.playsInline = true;
+    await video.play().catch(() => {});  // silenciar error si ya está reproduciendo
+
+    // Detectar si es cámara frontal para hacer mirror
+    const track    = stream.getVideoTracks()[0];
+    const settings = track ? track.getSettings() : {};
+    video.style.transform = (settings.facingMode === 'user') ? 'scaleX(-1)' : 'scaleX(1)';
+    video.style.display   = 'block';
+
+    // ── Hacer Three.js canvas transparente ───────────────────────
+    // Necesita las 3 líneas para funcionar en Android Chrome
     renderer.setClearColor(0x000000, 0);
-    canvas.style.background = 'transparent';
+    renderer.setClearAlpha(0);
+    renderer.autoClearColor = false;
 
     btn.classList.add('active');
     btn.innerHTML = '<i class="ti ti-camera-off"></i> Apagar cámara';
-    showToast('Cámara activada — modelo superpuesto', 'ok');
+    showToast('Cámara activa — modelo superpuesto', 'ok');
 
   } catch (err) {
-    _camStream = null;
-    let msg = 'Error al acceder a la cámara';
+    if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+    let msg = 'Error cámara: ' + (err.message || err.name);
     if (err.name === 'NotAllowedError')
-      msg = 'Permiso de cámara denegado. Permite el acceso en la barra del navegador.';
+      msg = 'Permiso denegado. Toca el icono de cámara en la barra del navegador.';
     else if (err.name === 'NotFoundError')
       msg = 'No se encontró cámara en este dispositivo.';
     else if (err.name === 'NotReadableError')
-      msg = 'La cámara está en uso por otra app.';
+      msg = 'La cámara está en uso por otra aplicación.';
     showToast(msg, 'err');
   }
 };
+
 
 
 /* Demo DXF con bloques 3D — para verificar que el parser funciona */
