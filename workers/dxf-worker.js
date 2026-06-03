@@ -273,21 +273,28 @@ function tryReadEntity(pairs, i) {
       py = parseFloat(value);
       if (type === 'LWPOLYLINE' || type === 'SPLINE') {
         if (px !== null && isFinite(px) && isFinite(py)) {
-          polyPoints.push({ x:px, y:py, bulge });
-          px = null; py = null; bulge = 0;
+          const pz = props._lz || 0;
+          polyPoints.push({ x:px, y:py, z:pz, bulge });
+          px = null; py = null; bulge = 0; props._lz = 0;
         }
       }
     }
+    if (code === 30) {
+      if (type === 'LWPOLYLINE' || type === 'SPLINE') props._lz = parseFloat(value);
+      else props.z1 = parseFloat(value);
+    }
     if (code === 11) props.x2     = parseFloat(value);
     if (code === 21) props.y2     = parseFloat(value);
+    if (code === 31) props.z2     = parseFloat(value);
+    if (code === 38) props.elev   = parseFloat(value); /* elevation */
     if (code === 40) props.r      = parseFloat(value);
     if (code === 50) props.startAngle = parseFloat(value);
     if (code === 51) props.endAngle   = parseFloat(value);
-    if (code === 42) bulge            = parseFloat(value); /* arco en polilínea */
+    if (code === 42) bulge            = parseFloat(value);
     if (code === 70) props.flags  = parseInt(value, 10);
-    if (code === 1)  props.text   = value;  /* TEXT content */
-    if (code === 3)  props.text   = (props.text || '') + value; /* MTEXT continuation */
-    if (code === 41) props.scaleX = parseFloat(value); /* INSERT */
+    if (code === 1)  props.text   = value;
+    if (code === 3)  props.text   = (props.text || '') + value;
+    if (code === 41) props.scaleX = parseFloat(value);
     if (code === 42 && type === 'INSERT') props.scaleY = parseFloat(value);
     if (code === 50 && type === 'INSERT') props.rotation = parseFloat(value);
     if (code === 2 && (type === 'INSERT')) props.blockName = value;
@@ -307,15 +314,16 @@ function tryReadEntity(pairs, i) {
     /* Leer VERTEX consecutivos */
     while (i < pairs.length && pairs[i][0] === 0 && pairs[i][1] === 'VERTEX') {
       i++;
-      let vx = null, vy = null, vb = 0;
+      let vx = null, vy = null, vz = 0, vb = 0;
       while (i < pairs.length && pairs[i][0] !== 0) {
         if (pairs[i][0] === 10) vx = parseFloat(pairs[i][1]);
         if (pairs[i][0] === 20) { vy = parseFloat(pairs[i][1]); }
+        if (pairs[i][0] === 30) vz = parseFloat(pairs[i][1]);
         if (pairs[i][0] === 42) vb = parseFloat(pairs[i][1]);
         i++;
       }
       if (vx !== null && vy !== null && isFinite(vx) && isFinite(vy)) {
-        polyPoints.push({ x:vx, y:vy, bulge:vb });
+        polyPoints.push({ x:vx, y:vy, z:vz, bulge:vb });
       }
     }
     /* Saltar SEQEND */
@@ -335,8 +343,8 @@ function appendEntity(result, e) {
 
   if (e.type === 'LINE') {
     if (!isFinite(e.x1) || !isFinite(e.y1) || !isFinite(e.x2) || !isFinite(e.y2)) return;
-    if (Math.abs(e.x1-e.x2) < 1e-10 && Math.abs(e.y1-e.y2) < 1e-10) return;
-    result.segments.push({ x1:e.x1, y1:e.y1, x2:e.x2, y2:e.y2, layer });
+    if (Math.abs(e.x1-e.x2) < 1e-10 && Math.abs(e.y1-e.y2) < 1e-10 && Math.abs((e.z1||0)-(e.z2||0)) < 1e-10) return;
+    result.segments.push({ x1:e.x1, y1:e.y1, z1:e.z1||e.elev||0, x2:e.x2, y2:e.y2, z2:e.z2||e.elev||0, layer });
     return;
   }
 
@@ -345,15 +353,15 @@ function appendEntity(result, e) {
     if (!pts || pts.length < 2) return;
     const closed = (e.flags & 1) === 1;
     if (closed) pts.push(pts[0]);
+    const elev = e.elev || 0;
     for (let j = 0; j < pts.length - 1; j++) {
       const a = pts[j], b = pts[j+1];
       if (!isFinite(a.x)||!isFinite(a.y)||!isFinite(b.x)||!isFinite(b.y)) continue;
-      /* Si hay bulge, convertir arco a segmentos */
       if (Math.abs(a.bulge) > 1e-6) {
         const arcSegs = bulgeToSegments(a, b, a.bulge);
-        arcSegs.forEach(s => result.segments.push({ ...s, layer }));
+        arcSegs.forEach(s => result.segments.push({ ...s, z1:a.z||elev, z2:b.z||elev, layer }));
       } else {
-        result.segments.push({ x1:a.x, y1:a.y, x2:b.x, y2:b.y, layer });
+        result.segments.push({ x1:a.x, y1:a.y, z1:a.z||elev, x2:b.x, y2:b.y, z2:b.z||elev, layer });
       }
     }
     return;
@@ -361,13 +369,13 @@ function appendEntity(result, e) {
 
   if (e.type === 'CIRCLE') {
     if (!isFinite(e.x1)||!isFinite(e.y1)||!e.r||e.r<=0) return;
-    result.circles.push({ cx:e.x1, cy:e.y1, r:e.r, layer });
+    result.circles.push({ cx:e.x1, cy:e.y1, cz:e.z1||e.elev||0, r:e.r, layer });
     return;
   }
 
   if (e.type === 'ARC') {
     if (!isFinite(e.x1)||!isFinite(e.y1)||!e.r||e.r<=0) return;
-    result.arcs.push({ cx:e.x1, cy:e.y1, r:e.r,
+    result.arcs.push({ cx:e.x1, cy:e.y1, cz:e.z1||e.elev||0, r:e.r,
       startAngle:e.startAngle||0, endAngle:e.endAngle||360, layer });
     return;
   }
