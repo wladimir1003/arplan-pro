@@ -4,19 +4,18 @@
 
 name: Deploy to GitHub Pages
 
-on:
+"on":
   push:
     branches: [ "main" ]
-  workflow_dispatch:   # permite ejecutar manualmente desde la UI de GitHub
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pages:    write
+  pages: write
   id-token: write
 
-# Solo un deploy concurrente, cancela el anterior si hay uno en curso
 concurrency:
-  group:   "pages"
+  group: "pages"
   cancel-in-progress: true
 
 jobs:
@@ -25,12 +24,9 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true   # necesario si usas Git LFS para GLB/DXF grandes
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -38,7 +34,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'   # sube todo el repositorio
+          path: '.'
 
       - name: Deploy to GitHub Pages
         id: deployment
