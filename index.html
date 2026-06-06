@@ -135,7 +135,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   width:100%;height:100%;object-fit:cover;
   z-index:0;display:none;background:#000;
 }
-#three-canvas{position:absolute;inset:0;width:100%!important;height:100%!important;z-index:1;display:block;}
+#three-canvas{position:absolute;inset:0;width:100%!important;height:100%!important;z-index:1;display:block;background:transparent!important;}
 #draw-canvas{position:absolute;inset:0;z-index:2;display:block;touch-action:none;}
 
 /* ── HUD ── */
@@ -582,6 +582,7 @@ const S={
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
+  arSavedTransform:null, debug:true,
 };
 
 /* ── Three.js setup ── */
@@ -596,6 +597,7 @@ renderer.setClearColor(0x0d1117,1);
 renderer.xr.enabled=true;
 
 const scene  = new THREE.Scene();
+scene.background = null;
 const camera = new THREE.PerspectiveCamera(55,1,.01,2000);
 camera.position.set(0,15,20);
 
@@ -649,26 +651,60 @@ renderer.xr.addEventListener('sessionstart',async()=>{
   document.getElementById('ar-reticle').style.display='block';
   const sess=renderer.xr.getSession();
   S.hitSrc=await sess.requestHitTestSource({space:await sess.requestReferenceSpace('viewer')});
-  if(S.model)S.model.position.set(0,-999,0);
+  if(S.model){
+    S.arSavedTransform={pos:S.model.position.clone(), quat:S.model.quaternion.clone(), scale:S.model.scale.clone()};
+    S.model.visible=false;
+  }
   S.modelPlaced=false;
+  showToast('Busca una superficie y pulsa “Colocar aquí”','ok');
 });
 renderer.xr.addEventListener('sessionend',()=>{
   controls.enabled=true;
   document.getElementById('ar-reticle').style.display='none';
   document.getElementById('ar-place').style.display='none';
   S.hitSrc=null;
-  if(S.model)S.model.position.set(0,0,0);
+  if(S.model){
+    S.model.visible=true;
+    if(!S.modelPlaced && S.arSavedTransform){
+      S.model.position.copy(S.arSavedTransform.pos);
+      S.model.quaternion.copy(S.arSavedTransform.quat);
+      S.model.scale.copy(S.arSavedTransform.scale);
+    }
+  }
+  S.arSavedTransform=null;
   setMode('3d'); showToast('Sesión AR finalizada');
 });
 
 window.placeAR=function(){
   if(S.model&&reticleMesh.visible){
+    S.model.visible=true;
     S.model.position.copy(reticleMesh.position);
+    S.model.quaternion.copy(reticleMesh.quaternion);
     S.modelPlaced=true;
     document.getElementById('ar-place').style.display='none';
     showToast('Modelo colocado','ok');
   }
 };
+
+function updateCameraOverlayMode(){
+  const video=document.getElementById('cam-video');
+  if(S.camStream){
+    video.style.display='block';
+    c3.style.background='transparent';
+    renderer.setClearColor(0x000000,0);
+    renderer.setClearAlpha(0);
+    renderer.autoClear=true;
+    renderer.autoClearColor=true;
+    scene.background=null;
+  } else {
+    renderer.setClearColor(0x0d1117,1);
+    renderer.setClearAlpha(1);
+    renderer.autoClear=true;
+    renderer.autoClearColor=true;
+  }
+  if(S.model){S.model.visible=true; zoomExtents();}
+  console.log('[ARPlan overlay]',{cameraActive:!!S.camStream, hasModel:!!S.model, modelVisible:S.model?.visible, rendererAlpha:renderer.getClearAlpha?.()});
+}
 
 /* ── Camera passthrough (Android/iOS) ── */
 window.toggleCamera=async function(){
@@ -684,7 +720,9 @@ window.toggleCamera=async function(){
     video.style.display='none';
     renderer.setClearColor(0x0d1117,1);
     renderer.setClearAlpha(1);
+    renderer.autoClear=true;
     renderer.autoClearColor=true;
+    scene.background=null;
     btn.classList.remove('cam-active');
     lbl.textContent='Activar Cámara';
     showToast('Cámara apagada');
@@ -739,10 +777,13 @@ window.toggleCamera=async function(){
   // Make Three.js canvas transparent
   renderer.setClearColor(0x000000,0);
   renderer.setClearAlpha(0);
-  renderer.autoClearColor=false;
+  renderer.autoClear=true;
+  renderer.autoClearColor=true;
+  scene.background=null;
 
   btn.classList.add('cam-active');
   lbl.textContent='Apagar Cámara';
+  updateCameraOverlayMode();
   showToast('Cámara activa — modelo superpuesto','ok');
 };
 
@@ -953,7 +994,8 @@ function loadGLTF(file){
   gltfLoader.load(url,gltf=>{
     setProgress(80);if(S.model)scene.remove(S.model);
     S.model=gltf.scene;normObj(S.model,20);scene.add(S.model);
-    URL.revokeObjectURL(url);setProgress(0);zoomExtents();
+    URL.revokeObjectURL(url);setProgress(0);zoomExtents();updateCameraOverlayMode();
+    console.log('[GLB/GLTF] cargado',{file:file.name, bbox:new THREE.Box3().setFromObject(S.model)});
     showToast('Modelo: '+file.name,'ok');
     updateLayers([{name:'MODELO',color:'#3b82f6',visible:true}]);
   },p=>{if(p.total)setProgress(30+(p.loaded/p.total)*50);},
@@ -966,7 +1008,7 @@ function normObj(obj,sz){
   const maxD=Math.max(size.x,size.y,size.z,.001);
   const s=sz/maxD; obj.scale.setScalar(s); S.zf=s;
   const ctr=box.getCenter(new THREE.Vector3());
-  obj.position.set(-ctr.x*s,0,-ctr.z*s);
+  obj.position.set(-ctr.x*s,-ctr.y*s,-ctr.z*s);
 }
 
 function loadDXF(file){
@@ -976,7 +1018,7 @@ function loadDXF(file){
       const text=e.target.result; setProgress(40);
       const parsed=parseDXF(text); setProgress(70);
       const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length;
-      console.log('[DXF] Parsed:',{total,layers:parsed.layers,sample3D:parsed.segments.filter(s=>(s.z1||0)!==0).length});
+      console.log('[DXF] Parsed:',{total,layers:parsed.layers,segments:parsed.segments.length,circles:parsed.circles.length,arcs:parsed.arcs.length,segments3D:parsed.segments.filter(s=>(s.z1||0)!==0||(s.z2||0)!==0).length,units:parsed.units||'inline-parser'});
       if(!total){showToast('DXF sin geometría visible','err');setProgress(0);return;}
       buildDXFModel(parsed);
     }catch(err){console.error(err);showToast('Error DXF: '+err.message,'err');setProgress(0);}
@@ -1031,7 +1073,9 @@ function buildDXFModel(parsed){
   S.model=group; scene.add(group);
   const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
   updateLayers(layObjs.length?layObjs:[{name:'0',color:'#3b82f6',visible:true}]);
-  setProgress(0); zoomExtents();
+  setProgress(0); zoomExtents();updateCameraOverlayMode();
+  const bb=new THREE.Box3().setFromObject(group), bs=bb.getSize(new THREE.Vector3());
+  console.log('[DXF Statistics]',{entidadesRenderizadas:added,capas:layObjs.length,bboxMin:bb.min,bboxMax:bb.max,altura:bs.y,escala:S.zf});
   showToast(`DXF: ${added} entidades, ${layObjs.length} capas`,'ok');
   if(IS_MOBILE&&added>50000)showToast('Modelo muy grande — puede ir lento en móvil','err');
 }
