@@ -298,6 +298,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   <button class="tb-btn" onclick="zoomOut()" title="Zoom -"><i class="ti ti-zoom-out"></i></button>
   <button class="tb-btn" id="btn-top" onclick="setView('top')" title="Planta"><i class="ti ti-layout-2"></i></button>
   <button class="tb-btn" id="btn-iso" onclick="setView('iso')" title="3D"><i class="ti ti-cube"></i></button>
+  <button class="tb-btn active" id="btn-grid" onclick="toggleGrid()" title="Grilla: completa / tenue / apagada"><i class="ti ti-grid-dots"></i></button>
   <div class="tb-sep"></div>
 
   <!-- Dibujo rápido -->
@@ -462,10 +463,18 @@ html,body{width:100%;height:100%;overflow:hidden;
       <button class="dz-ghost" onclick="toggleGPS()" id="gps-toggle-btn" style="width:100%;font-size:11px;padding:7px;margin-top:6px"><i class="ti ti-current-location"></i> Activar GPS</button>
       <button class="dz-ghost" onclick="setOrigin()" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-map-pin-plus"></i> Fijar origen aquí</button>
       <div style="display:flex;gap:4px;margin-top:4px">
-        <input id="p-lat" placeholder="Lat proyecto" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
-        <input id="p-lon" placeholder="Lon proyecto" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="p-lat" placeholder="Lat origen" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="p-lon" placeholder="Lon origen" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
       </div>
-      <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar coordenadas</button>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <input id="utm-zone" placeholder="Zona UTM ej: 19S" value="19S" style="width:74px;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="utm-e" placeholder="E origen DXF" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="utm-n" placeholder="N origen DXF" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+      </div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);margin-top:6px">
+        <input type="checkbox" id="geo-lock"> Usar coordenadas UTM reales del DXF
+      </label>
+      <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar GPS/UTM</button>
     </div>
   </div>
 </div>
@@ -579,6 +588,7 @@ const S={
   undoStack:[],
   gpsActive:false, gpsWatch:null, gpsPos:null, heading:null,
   projLat:null, projLon:null,
+  utmZone:'19S', utmE:null, utmN:null, geoLock:false, lastDXFText:null, modelIsDXF:false, gridMode:0,
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
@@ -598,7 +608,7 @@ renderer.xr.enabled=true;
 
 const scene  = new THREE.Scene();
 scene.background = null;
-const camera = new THREE.PerspectiveCamera(55,1,.01,2000);
+const camera = new THREE.PerspectiveCamera(55,1,.01,20000);
 camera.position.set(0,15,20);
 
 const controls=new OrbitControls(camera,c3);
@@ -613,6 +623,8 @@ const dL=new THREE.DirectionalLight(0xffffff,1.2);
 dL.position.set(10,20,10); dL.castShadow=true; scene.add(dL);
 
 const grid=new THREE.GridHelper(200,200,0x334155,0x1e293b);
+grid.material.transparent=true;
+grid.material.opacity=.75;
 scene.add(grid);
 
 const reticleMesh=new THREE.Mesh(
@@ -993,7 +1005,7 @@ function loadGLTF(file){
   const url=URL.createObjectURL(file);setProgress(30);
   gltfLoader.load(url,gltf=>{
     setProgress(80);if(S.model)scene.remove(S.model);
-    S.model=gltf.scene;normObj(S.model,20);scene.add(S.model);
+    S.model=gltf.scene; S.modelIsDXF=false; normObj(S.model,20);scene.add(S.model);
     URL.revokeObjectURL(url);setProgress(0);zoomExtents();updateCameraOverlayMode();
     console.log('[GLB/GLTF] cargado',{file:file.name, bbox:new THREE.Box3().setFromObject(S.model)});
     showToast('Modelo: '+file.name,'ok');
@@ -1015,7 +1027,7 @@ function loadDXF(file){
   const reader=new FileReader(); setProgress(20);
   reader.onload=async e=>{
     try{
-      const text=e.target.result; setProgress(40);
+      const text=e.target.result; S.lastDXFText=text; setProgress(40);
       const parsed=parseDXF(text); setProgress(70);
       const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length;
       console.log('[DXF] Parsed:',{total,layers:parsed.layers,segments:parsed.segments.length,circles:parsed.circles.length,arcs:parsed.arcs.length,segments3D:parsed.segments.filter(s=>(s.z1||0)!==0||(s.z2||0)!==0).length,units:parsed.units||'inline-parser'});
@@ -1038,18 +1050,19 @@ function buildDXFModel(parsed){
     return matCache[layer];
   };
   let added=0;
+  const coordOrigin=getDXFLocalOrigin(parsed);
+  const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, -(y-coordOrigin.n));
   parsed.segments.forEach(s=>{
-    // DXF: X=Este(→), Y=Norte(↑), Z=Altura
-    // Three.js: X=Este, Y=Altura, Z=-Norte (negar Y para orientación correcta)
-    const p1=new THREE.Vector3(s.x1, s.z1||0, -s.y1);
-    const p2=new THREE.Vector3(s.x2, s.z2||0, -s.y2);
+    // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=-Norte.
+    const p1=toV(s.x1, s.y1, s.z1||0);
+    const p2=toV(s.x2, s.y2, s.z2||0);
     if(p1.distanceTo(p2)<1e-10)return;
     const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1,p2]),mat(s.layer));
     ln.userData.layer=s.layer; group.add(ln); added++;
   });
   parsed.circles.forEach(c=>{
     const pts=[],N=Math.max(32,Math.floor(c.r*4)),cz=c.cz||0;
-    for(let i=0;i<=N;i++){const a=i/N*Math.PI*2;pts.push(new THREE.Vector3(c.cx+Math.cos(a)*c.r,cz,-(c.cy+Math.sin(a)*c.r)));}
+    for(let i=0;i<=N;i++){const a=i/N*Math.PI*2;pts.push(toV(c.cx+Math.cos(a)*c.r,c.cy+Math.sin(a)*c.r,cz));}
     const cl=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(c.layer));
     cl.userData.layer=c.layer; group.add(cl); added++;
   });
@@ -1058,7 +1071,7 @@ function buildDXFModel(parsed){
     let s0=a.startAngle*Math.PI/180,e0=a.endAngle*Math.PI/180;
     if(e0<=s0)e0+=Math.PI*2;
     const N=Math.max(16,Math.floor((e0-s0)/(Math.PI/32)));
-    for(let i=0;i<=N;i++){const ang=s0+(e0-s0)*i/N;pts.push(new THREE.Vector3(a.cx+Math.cos(ang)*a.r,az,-(a.cy+Math.sin(ang)*a.r)));}
+    for(let i=0;i<=N;i++){const ang=s0+(e0-s0)*i/N;pts.push(toV(a.cx+Math.cos(ang)*a.r,a.cy+Math.sin(ang)*a.r,az));}
     const al=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(a.layer));
     al.userData.layer=a.layer; group.add(al); added++;
   });
@@ -1066,16 +1079,23 @@ function buildDXFModel(parsed){
   const box=new THREE.Box3().setFromObject(group);
   if(box.isEmpty()){showToast('Bounding box vacío','err');setProgress(0);return;}
   const sz=box.getSize(new THREE.Vector3());
-  const sc=40/Math.max(sz.x,sz.y,sz.z,.001);
-  group.scale.setScalar(sc); S.zf=sc;
-  const ctr=box.getCenter(new THREE.Vector3());
-  group.position.set(-ctr.x*sc,-ctr.y*sc,-ctr.z*sc);
-  S.model=group; scene.add(group);
+  if(S.geoLock){
+    group.scale.setScalar(1); S.zf=1;
+    group.userData.geoOrigin={e:coordOrigin.e,n:coordOrigin.n,zone:S.utmZone};
+    group.position.set(0,0,0);
+  }else{
+    const sc=40/Math.max(sz.x,sz.y,sz.z,.001);
+    group.scale.setScalar(sc); S.zf=sc;
+    const ctr=box.getCenter(new THREE.Vector3());
+    group.position.set(-ctr.x*sc,-ctr.y*sc,-ctr.z*sc);
+  }
+  S.model=group; S.modelIsDXF=true; scene.add(group);
+  if(S.geoLock) updateGeoModelFromGPS();
   const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
   updateLayers(layObjs.length?layObjs:[{name:'0',color:'#3b82f6',visible:true}]);
   setProgress(0); zoomExtents();updateCameraOverlayMode();
   const bb=new THREE.Box3().setFromObject(group), bs=bb.getSize(new THREE.Vector3());
-  console.log('[DXF Statistics]',{entidadesRenderizadas:added,capas:layObjs.length,bboxMin:bb.min,bboxMax:bb.max,altura:bs.y,escala:S.zf});
+  console.log('[DXF Statistics]',{entidadesRenderizadas:added,capas:layObjs.length,bboxMin:bb.min,bboxMax:bb.max,altura:bs.y,escala:S.zf, geoLock:S.geoLock, coordOrigin});
   showToast(`DXF: ${added} entidades, ${layObjs.length} capas`,'ok');
   if(IS_MOBILE&&added>50000)showToast('Modelo muy grande — puede ir lento en móvil','err');
 }
@@ -1261,7 +1281,19 @@ window.setView=function(v){
   document.querySelectorAll('[id^=btn-top],[id^=btn-iso]').forEach(b=>b.classList.remove('active'));
   const btn=document.getElementById('btn-'+v);if(btn)btn.classList.add('active');
 };
-window.toggleGrid=function(){grid.visible=!grid.visible;};
+function applyGridMode(){
+  const btn=document.getElementById('btn-grid');
+  const labels=['Grilla completa','Grilla tenue','Grilla apagada'];
+  if(S.gridMode===0){grid.visible=true;grid.material.opacity=.75;btn?.classList.add('active');}
+  else if(S.gridMode===1){grid.visible=true;grid.material.opacity=.18;btn?.classList.add('active');}
+  else {grid.visible=false;btn?.classList.remove('active');}
+  if(btn)btn.title=labels[S.gridMode]+' — toca para cambiar';
+}
+window.toggleGrid=function(){
+  S.gridMode=(S.gridMode+1)%3;
+  applyGridMode();
+  showToast(['Grilla completa','Grilla tenue','Grilla oculta'][S.gridMode]);
+};
 window.setMode=function(m){
   S.mode=m;
   ['3d','ar','gps'].forEach(n=>document.getElementById('hbtn-'+n)?.classList.remove('active'));
@@ -1348,6 +1380,71 @@ function updateLayers(layers){
 }
 window.toggleLayer=function(name){const l=S.layers.find(x=>x.name===name);if(l){l.visible=!l.visible;updateLayers(S.layers);}};
 
+
+/* ── UTM/GPS georreferenciado ── */
+function parseUTMZone(z){
+  const m=String(z||'19S').trim().toUpperCase().match(/^(\d{1,2})([C-X])?$/);
+  const zone=m?Math.max(1,Math.min(60,parseInt(m[1],10))):19;
+  const hem=(m&&m[2]&&m[2]>='N')?'N':'S';
+  return {zone,hem,label:String(zone)+hem};
+}
+function latLonToUTM(lat,lon,zoneOverride){
+  const a=6378137.0, f=1/298.257223563, k0=0.9996;
+  const e=Math.sqrt(f*(2-f));
+  const ep2=e*e/(1-e*e);
+  const z=parseUTMZone(zoneOverride||S.utmZone);
+  const zone=z.zone;
+  const lon0=((zone-1)*6-180+3)*Math.PI/180;
+  const phi=lat*Math.PI/180, lam=lon*Math.PI/180;
+  const N=a/Math.sqrt(1-e*e*Math.sin(phi)**2);
+  const T=Math.tan(phi)**2;
+  const C=ep2*Math.cos(phi)**2;
+  const A=Math.cos(phi)*(lam-lon0);
+  const M=a*((1-e*e/4-3*e**4/64-5*e**6/256)*phi
+    -(3*e*e/8+3*e**4/32+45*e**6/1024)*Math.sin(2*phi)
+    +(15*e**4/256+45*e**6/1024)*Math.sin(4*phi)
+    -(35*e**6/3072)*Math.sin(6*phi));
+  let E=k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep2)*A**5/120)+500000;
+  let North=k0*(M+N*Math.tan(phi)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep2)*A**6/720));
+  if(lat<0)North+=10000000;
+  return {e:E,n:North,zone:z.label};
+}
+function getDXFLocalOrigin(parsed){
+  if(S.geoLock && isFinite(S.utmE) && isFinite(S.utmN)) return {e:S.utmE,n:S.utmN};
+  let minE=Infinity,minN=Infinity;
+  (parsed.segments||[]).forEach(s=>{minE=Math.min(minE,s.x1,s.x2);minN=Math.min(minN,s.y1,s.y2);});
+  (parsed.circles||[]).forEach(c=>{minE=Math.min(minE,c.cx-c.r);minN=Math.min(minN,c.cy-c.r);});
+  (parsed.arcs||[]).forEach(a=>{minE=Math.min(minE,a.cx-a.r);minN=Math.min(minN,a.cy-a.r);});
+  if(!isFinite(minE)||!isFinite(minN))return {e:0,n:0};
+  if(S.geoLock){
+    S.utmE=minE; S.utmN=minN;
+    document.getElementById('utm-e').value=minE.toFixed(3);
+    document.getElementById('utm-n').value=minN.toFixed(3);
+  }
+  return {e:minE,n:minN};
+}
+function updateGeoModelFromGPS(){
+  if(!S.geoLock||!S.model||!S.gpsPos||!S.model.userData.geoOrigin)return;
+  const u=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
+  const o=S.model.userData.geoOrigin;
+  S.model.position.set(o.e-u.e,0,-(o.n-u.n));
+  const dist=Math.hypot(o.e-u.e,o.n-u.n);
+  document.getElementById('xyz-pill').textContent=`UTM ${u.zone} E ${u.e.toFixed(2)} N ${u.n.toFixed(2)} | origen a ${dist.toFixed(1)} m`;
+  if(S.heading!=null){
+    camera.rotation.order='YXZ';
+    camera.rotation.y=THREE.MathUtils.degToRad(S.heading);
+  }
+  console.log('[GPS/UTM]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,modelPosition:S.model.position});
+}
+function rebuildDXFForGeoMode(){
+  if(S.modelIsDXF&&S.lastDXFText){
+    try{buildDXFModel(parseDXF(S.lastDXFText));}
+    catch(e){console.error(e);showToast('No se pudo reconstruir DXF UTM','err');}
+  }else if(S.model){
+    showToast('UTM real se aplica mejor a DXF coordenado; GLB requiere origen manual','err');
+  }
+}
+
 /* ── GPS ── */
 window.toggleGPS=function(){
   if(S.gpsActive){
@@ -1379,6 +1476,7 @@ window.toggleGPS=function(){
     document.getElementById('gps-toggle-btn').innerHTML='<i class="ti ti-current-location"></i> Desactivar GPS';
     document.getElementById('btn-gps').classList.add('active');
     document.getElementById('sb-gps').innerHTML=`<i class="ti ti-current-location"></i> ±${acc}m`;
+    updateGeoModelFromGPS();
   };
   const err=e=>{
     const msgs={1:'Permiso GPS denegado.',2:'Sin señal GPS.',3:'Timeout GPS.'};
@@ -1394,13 +1492,27 @@ window.setOrigin=function(){
   S.projLat=S.gpsPos.latitude;S.projLon=S.gpsPos.longitude;
   document.getElementById('p-lat').value=S.projLat.toFixed(6);
   document.getElementById('p-lon').value=S.projLon.toFixed(6);
-  showToast('Origen fijado','ok');
+  const u=latLonToUTM(S.projLat,S.projLon,document.getElementById('utm-zone')?.value||S.utmZone);
+  document.getElementById('utm-zone').value=u.zone;
+  document.getElementById('utm-e').value=u.e.toFixed(3);
+  document.getElementById('utm-n').value=u.n.toFixed(3);
+  S.utmZone=u.zone; S.utmE=u.e; S.utmN=u.n;
+  showToast('Origen GPS/UTM fijado','ok');
 };
 window.applyProjCoords=function(){
   const lat=parseFloat(document.getElementById('p-lat').value);
   const lon=parseFloat(document.getElementById('p-lon').value);
-  if(isNaN(lat)||isNaN(lon)){showToast('Coordenadas inválidas','err');return;}
-  S.projLat=lat;S.projLon=lon;showToast('Coordenadas aplicadas','ok');
+  const ze=document.getElementById('utm-zone')?.value||'19S';
+  const e=parseFloat(document.getElementById('utm-e')?.value);
+  const n=parseFloat(document.getElementById('utm-n')?.value);
+  S.utmZone=parseUTMZone(ze).label;
+  S.utmE=isFinite(e)?e:null; S.utmN=isFinite(n)?n:null;
+  S.geoLock=!!document.getElementById('geo-lock')?.checked;
+  if(!isNaN(lat)&&!isNaN(lon)){S.projLat=lat;S.projLon=lon;}
+  if(S.geoLock && (!isFinite(S.utmE)||!isFinite(S.utmN))){showToast('UTM activo: si dejas E/N vacío usaré el mínimo del DXF','ok');}
+  rebuildDXFForGeoMode();
+  updateGeoModelFromGPS();
+  showToast(S.geoLock?'GPS/UTM real aplicado':'Coordenadas guardadas','ok');
 };
 
 // Compass
@@ -1456,7 +1568,13 @@ window.startARSurface=async function(){
 window.startARGPS=function(){
   if(!S.gpsActive){showToast('Activa el GPS primero','err');toggleGPS();return;}
   if(!S.model){showToast('Carga un modelo primero','err');return;}
-  setMode('gps');showToast('AR GPS activo','ok');
+  if(!S.geoLock){
+    document.getElementById('geo-lock').checked=true;
+    applyProjCoords();
+  }
+  updateCameraOverlayMode();
+  updateGeoModelFromGPS();
+  setMode('gps');showToast('AR GPS/UTM activo: precisión depende del GPS','ok');
 };
 
 /* ── Screenshot ── */
@@ -1534,6 +1652,7 @@ if('serviceWorker'in navigator&&_swOk){
 
 /* ── Init ── */
 resizeAll();
+applyGridMode();
 setView('iso');
 setTimeout(()=>{
   if(!localStorage.getItem('arplan_tutorial_done')){
