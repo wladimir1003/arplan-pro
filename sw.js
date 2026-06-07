@@ -1,20 +1,19 @@
-/* ============================================================
-   ARPlan Pro — Service Worker
-   Estrategia: Cache-first para assets estáticos
-               Network-first para CDN de Three.js
-   Compatible: Chrome, Firefox, Safari 11.1+, Brave
-============================================================ */
+/* ================================================================
+   ARPlan Pro — Service Worker v1.2.0
+   Estrategia:
+     Core assets  → Cache-first (offline funcional)
+     CDN (Three.js, Tabler) → Stale-while-revalidate
+   Cachea solo archivos reales del repositorio
+================================================================ */
+const APP_VERSION = '1.2.0';
+const CACHE_CORE  = `arplan-v${APP_VERSION}-core`;
+const CACHE_CDN   = `arplan-v${APP_VERSION}-cdn`;
 
-const VERSION     = 'arplan-v1.0.0';
-const CACHE_CORE  = VERSION + '-core';
-const CACHE_CDN   = VERSION + '-cdn';
-
-/* Archivos propios que se cachean en la instalación */
+/* Archivos propios que se pre-cachean al instalar */
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './workers/dxf-worker.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
@@ -27,7 +26,7 @@ const CDN_ORIGINS = [
   'fonts.gstatic.com',
 ];
 
-/* ── INSTALL: pre-cachear assets propios ─────────────────── */
+/* ── INSTALL ── */
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_CORE)
@@ -37,89 +36,78 @@ self.addEventListener('install', event => {
   );
 });
 
-/* ── ACTIVATE: limpiar caches viejos ────────────────────── */
+/* ── ACTIVATE: limpiar versiones anteriores ── */
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
+    caches.keys()
+      .then(keys => Promise.all(
         keys
           .filter(k => k !== CACHE_CORE && k !== CACHE_CDN)
-          .map(k => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+          .map(k => {
+            console.log('[SW] deleting old cache:', k);
+            return caches.delete(k);
+          })
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-/* ── FETCH: estrategia por tipo de recurso ──────────────── */
+/* ── FETCH ── */
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
-  /* Ignorar requests que no son GET */
+  /* Solo GET */
   if (request.method !== 'GET') return;
 
-  /* Ignorar requests a APIs del navegador (chrome-extension, etc.) */
+  /* Solo HTTP/HTTPS */
   if (!url.protocol.startsWith('http')) return;
 
-  /* Ignorar Geolocation, WebXR y otras APIs nativas — no son fetch */
-
-  /* CDN externos: Cache-first, actualizar en background (stale-while-revalidate) */
-  if (CDN_ORIGINS.some(origin => url.hostname.includes(origin))) {
+  /* CDN → stale-while-revalidate */
+  if (CDN_ORIGINS.some(o => url.hostname.includes(o))) {
     event.respondWith(staleWhileRevalidate(request, CACHE_CDN));
     return;
   }
 
-  /* Archivos propios: Cache-first */
+  /* Archivos propios → cache-first */
   if (url.origin === self.location.origin) {
     event.respondWith(cacheFirst(request, CACHE_CORE));
     return;
   }
 
-  /* Todo lo demás: red directa */
+  /* Todo lo demás → red directa (APIs GPS, WebXR, etc.) */
 });
 
-/* ── Estrategias ────────────────────────────────────────── */
+/* ── Estrategias ── */
 
-/**
- * Cache-first: responde desde caché si existe,
- * si no va a red y guarda el resultado.
- */
 async function cacheFirst(request, cacheName) {
-  const cache    = await caches.open(cacheName);
-  const cached   = await cache.match(request);
+  const cache  = await caches.open(cacheName);
+  const cached = await cache.match(request);
   if (cached) return cached;
-
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      cache.put(request, response.clone());
-    }
+    if (response.ok) cache.put(request, response.clone());
     return response;
   } catch (_) {
-    /* Sin red y sin caché: devolver página offline simple */
     return offlineFallback();
   }
 }
 
-/**
- * Stale-while-revalidate: responde desde caché inmediatamente
- * y actualiza en background.
- */
 async function staleWhileRevalidate(request, cacheName) {
   const cache  = await caches.open(cacheName);
   const cached = await cache.match(request);
 
-  const fetchPromise = fetch(request).then(response => {
-    if (response.ok) cache.put(request, response.clone());
-    return response;
-  }).catch(() => null);
+  const fetchPromise = fetch(request)
+    .then(response => {
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    })
+    .catch(() => null);
 
-  return cached || await fetchPromise || offlineFallback();
+  return cached || (await fetchPromise) || offlineFallback();
 }
 
-/**
- * Página de fallback cuando no hay red ni caché.
- */
+/* ── Página offline ── */
 function offlineFallback() {
   return new Response(
     `<!DOCTYPE html>
@@ -129,21 +117,28 @@ function offlineFallback() {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ARPlan Pro — Sin conexión</title>
   <style>
-    body { margin:0; background:#111827; color:#f9fafb;
-           font-family:-apple-system,sans-serif;
-           display:flex; flex-direction:column; align-items:center;
-           justify-content:center; min-height:100vh; text-align:center; padding:20px; }
-    h1 { font-size:20px; font-weight:500; margin-bottom:8px; }
-    p  { font-size:14px; color:#9ca3af; margin-bottom:20px; }
-    button { padding:10px 24px; background:#3b82f6; color:#fff;
-             border:none; border-radius:20px; font-size:14px; cursor:pointer; }
+    body{
+      margin:0;background:#0d1117;color:#f1f5f9;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      display:flex;flex-direction:column;align-items:center;
+      justify-content:center;min-height:100vh;text-align:center;padding:24px;
+    }
+    h1{font-size:20px;font-weight:500;margin-bottom:8px;}
+    p{font-size:14px;color:#94a3b8;margin-bottom:24px;line-height:1.6;}
+    button{
+      padding:11px 28px;background:#3b82f6;color:#fff;
+      border:none;border-radius:22px;font-size:14px;cursor:pointer;
+    }
+    .version{position:fixed;bottom:12px;right:12px;font-size:10px;color:#374151;}
   </style>
 </head>
 <body>
   <h1>Sin conexión</h1>
   <p>ARPlan Pro no pudo cargar.<br>
-     Verifica tu conexión o espera a que se descargue la caché.</p>
+     Verifica tu conexión a internet<br>
+     o espera a que se descargue el caché.</p>
   <button onclick="location.reload()">Reintentar</button>
+  <div class="version">v${APP_VERSION}</div>
 </body>
 </html>`,
     {
@@ -153,16 +148,12 @@ function offlineFallback() {
   );
 }
 
-/* ── Mensajes desde la app ───────────────────────────────── */
+/* ── Mensajes desde la app ── */
 self.addEventListener('message', event => {
   if (!event.data) return;
-
-  /* La app puede pedir forzar actualización */
   if (event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-
-  /* La app puede pedir limpiar el caché CDN (para forzar reload de libs) */
   if (event.data.type === 'CLEAR_CDN_CACHE') {
     caches.delete(CACHE_CDN).then(() => {
       event.ports[0]?.postMessage({ ok: true });
