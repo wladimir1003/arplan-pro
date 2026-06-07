@@ -6,9 +6,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro — Recorrido UTM</title>
+<title>ARPlan Pro — Navegación AR + UTM</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
 <style>
 /* ── Reset ── */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -277,6 +277,34 @@ html,body{width:100%;height:100%;overflow:hidden;
   .dz-btn,.dz-ghost{min-height:48px;}
   .layer-row{min-height:40px;}
 }
+
+/* ── Waze-style compass HUD ── */
+#compass-rose{
+  position:absolute;bottom:52px;right:8px;
+  width:44px;height:44px;
+  background:rgba(0,0,0,.72);
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:50%;
+  display:none;align-items:center;justify-content:center;
+  pointer-events:all;cursor:pointer;
+  z-index:10;
+}
+#compass-rose svg{transition:transform .3s ease;}
+#compass-rose.active{display:flex;}
+
+/* User marker label */
+.user-label-hud{
+  position:absolute;
+  bottom:100px;left:50%;
+  transform:translateX(-50%);
+  background:rgba(59,130,246,.85);
+  color:#fff;border-radius:16px;
+  padding:5px 14px;font-size:12px;
+  font-family:monospace;
+  display:none;pointer-events:none;
+  z-index:10;white-space:nowrap;
+}
+#user-label-pill.active{display:block;}
 /* GPU compositing for smooth animation */
 #viewport,#three-canvas,#cam-video{-webkit-transform:translateZ(0);transform:translateZ(0);}
 </style>
@@ -309,11 +337,12 @@ html,body{width:100%;height:100%;overflow:hidden;
   <div class="tb-sep"></div>
 
   <!-- Captura -->
-  <button class="tb-btn" onclick="doScreenshot()" title="Pantallazo"><i class="ti ti-screenshot"></i></button>
+  <button class="tb-btn" onclick="doScreenshot()" title="Pantallazo"><i class="ti ti-camera-pin"></i></button>
   <div class="tb-sep"></div>
 
   <!-- GPS & AR -->
   <button class="tb-btn" id="btn-gps" onclick="toggleGPS()" title="GPS"><i class="ti ti-current-location"></i></button>
+  <button class="tb-btn" onclick="centerOnUser()" title="Centrar en mi posición" style="color:#22c55e"><i class="ti ti-crosshair"></i></button>
   <button class="tb-btn" onclick="startARSurface()" title="AR Superficie" style="color:#6ee7b7"><i class="ti ti-augmented-reality"></i></button>
   <div class="tb-sep"></div>
 
@@ -340,7 +369,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   <button class="tool-btn"        id="tl-highlight"  onclick="setTool('highlight')"  title="Resaltador"><i class="ti ti-highlight"></i></button>
   <button class="tool-btn"        id="tl-text"       onclick="setTool('text')"       title="Texto"><i class="ti ti-text-caption"></i></button>
   <button class="tool-btn"        id="tl-cloud"      onclick="setTool('cloud')"      title="Nube revisión"><i class="ti ti-cloud"></i></button>
-  <button class="tool-btn"        id="tl-arrow"      onclick="setTool('arrow')"      title="Flecha"><i class="ti ti-arrow-big-right"></i></button>
+  <button class="tool-btn"        id="tl-arrow"      onclick="setTool('arrow')"      title="Flecha"><i class="ti ti-arrow-right"></i></button>
   <div class="tool-sep"></div>
   <button class="tool-btn"        id="tl-measure"    onclick="setTool('measure')"    title="Medir"><i class="ti ti-ruler"></i></button>
   <button class="tool-btn"        id="tl-gpspin"     onclick="setTool('gpspin')"     title="Pin GPS"><i class="ti ti-map-pin"></i></button>
@@ -366,14 +395,36 @@ html,body{width:100%;height:100%;overflow:hidden;
       <button class="mode-btn mar"         id="hbtn-ar"  onclick="startARSurface()">AR Sup.</button>
       <button class="mode-btn mgps"        id="hbtn-gps" onclick="startARGPS()">AR GPS</button>
     </div>
-    <div class="hud-bl"><div class="hpill" id="xyz-pill" style="font-size:10px;font-family:monospace">—</div></div>
+    <div class="hud-bl">
+      <div class="hpill" id="xyz-pill" style="font-size:10px;font-family:monospace">—</div>
+      <div class="hpill" id="nav-hud" style="display:none;flex-direction:column;gap:2px;align-items:flex-start;padding:8px 12px;margin-top:4px">
+        <div style="font-size:10px;font-weight:600;color:var(--green);margin-bottom:2px">📍 RECORRIDO ACTIVO</div>
+        <div style="font-size:11px;font-family:monospace" id="nav-hud-utm">UTM —</div>
+        <div style="font-size:11px;font-family:monospace" id="nav-hud-near">— —</div>
+        <div style="font-size:11px;color:#fcd34d;font-family:monospace" id="nav-hud-dist">— m  Rumbo: —°</div>
+      </div>
+    </div>
     <div class="hud-br">
+      <!-- Compass rose -->
+      <div id="compass-rose" onclick="centerOnUser()" title="Centrar en mi posición">
+        <svg width="32" height="32" viewBox="0 0 32 32">
+          <circle cx="16" cy="16" r="14" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="1"/>
+          <!-- North arrow (red) -->
+          <polygon id="compass-n" points="16,3 18.5,16 16,14 13.5,16" fill="#ef4444"/>
+          <!-- South arrow (white) -->
+          <polygon id="compass-s" points="16,29 18.5,16 16,18 13.5,16" fill="rgba(255,255,255,.5)"/>
+          <circle cx="16" cy="16" r="2.5" fill="#fff"/>
+          <text x="16" y="7" text-anchor="middle" fill="#ef4444" font-size="5" font-weight="bold">N</text>
+        </svg>
+      </div>
       <div class="zoom-row">
         <button class="zb" onclick="zoomIn()"  aria-label="+">+</button>
         <div class="zv" id="zoom-val">1.0×</div>
         <button class="zb" onclick="zoomOut()" aria-label="−">−</button>
       </div>
     </div>
+  <!-- User position label (shown when GPS active) -->
+  <div class="user-label-hud" id="user-label-pill"></div>
   </div>
 
   <!-- AR -->
@@ -392,9 +443,9 @@ html,body{width:100%;height:100%;overflow:hidden;
 
   <!-- Drop zone -->
   <div id="dropzone">
-    <i class="ti ti-file-3d" style="font-size:52px;color:var(--accent);opacity:.7"></i>
+    <i class="ti ti-box" style="font-size:52px;color:var(--accent);opacity:.7"></i>
     <h2>ARPlan Pro</h2>
-    <p>Visor AR de planos arquitectónicos</p>
+    <p>Recorre tu proyecto en terreno con GPS y AR</p>
     <input type="file" id="file-input" accept=".glb,.gltf,.dxf">
     <button class="dz-btn" onclick="triggerOpen()"><i class="ti ti-folder-open"></i> Seleccionar archivo</button>
     <button class="dz-ghost" onclick="loadDemo()">Demo 3D (muros)</button>
@@ -524,7 +575,7 @@ html,body{width:100%;height:100%;overflow:hidden;
 <!-- ═══ SYNC BOOTSTRAP ═══ -->
 <script>
 (function(){
-  const V='1.1.0';
+  const V='1.2.0';
   if(localStorage.getItem('arplan_v')!==V){
     localStorage.removeItem('arplan_tutorial_done');
     localStorage.setItem('arplan_v',V);
@@ -658,6 +709,76 @@ const reticleMesh=new THREE.Mesh(
   new THREE.MeshBasicMaterial({color:0x00ff88,side:THREE.DoubleSide}));
 reticleMesh.visible=false; scene.add(reticleMesh);
 
+/* ── User position marker (Waze-style) ── */
+const userMarker=(()=>{
+  const g=new THREE.Group();
+
+  // Base pulsing ring (flat on ground)
+  const ring=new THREE.Mesh(
+    new THREE.RingGeometry(0.4,0.55,48).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x3b82f6,transparent:true,opacity:0.7,side:THREE.DoubleSide,depthWrite:false}));
+  g.add(ring);
+
+  // Outer glow ring
+  const glow=new THREE.Mesh(
+    new THREE.RingGeometry(0.55,0.9,48).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x3b82f6,transparent:true,opacity:0.25,side:THREE.DoubleSide,depthWrite:false}));
+  g.add(glow);
+
+  // Accuracy circle (will be scaled by GPS accuracy in meters)
+  const accRing=new THREE.Mesh(
+    new THREE.RingGeometry(0.9,0.95,48).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x22c55e,transparent:true,opacity:0.4,side:THREE.DoubleSide,depthWrite:false}));
+  accRing.name='accRing';
+  g.add(accRing);
+
+  // Direction arrow — cone pointing in heading direction
+  const cone=new THREE.Mesh(
+    new THREE.ConeGeometry(0.3,0.9,8),
+    new THREE.MeshBasicMaterial({color:0x3b82f6}));
+  cone.position.set(0,0.45,0);
+  cone.name='dirCone';
+  g.add(cone);
+
+  // White dot center
+  const dot=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15,0.15,0.05,16),
+    new THREE.MeshBasicMaterial({color:0xffffff}));
+  dot.position.y=0.03;
+  g.add(dot);
+
+  g.visible=false;
+  g.renderOrder=999; // always on top of model
+  scene.add(g);
+
+  return {
+    group:g, ring, glow, accRing, cone,
+    pulsePhase:0,
+    update(dt){
+      this.pulsePhase+=dt*2.5;
+      const pulse=0.5+0.5*Math.sin(this.pulsePhase);
+      this.ring.material.opacity=0.5+0.3*pulse;
+      this.glow.scale.setScalar(0.9+0.15*pulse);
+    },
+    setAccuracyRadius(r){
+      // r in scene units (already scaled by S.zf)
+      const s=Math.max(r,0.5);
+      this.accRing.scale.setScalar(s);
+    },
+    setHeading(deg){
+      // Rotate group so the cone points in compass heading direction
+      // Three.js: Z+ is South, Z- is North; heading 0=North
+      this.cone.rotation.y=0;
+      this.group.rotation.y=-THREE.MathUtils.degToRad(deg);
+    },
+    setPosition(x,y,z){
+      this.group.position.set(x,y+0.02,z);
+    },
+    show(){ this.group.visible=true; },
+    hide(){ this.group.visible=false; },
+  };
+})();
+
 function resizeAll(){
   const w=vp.clientWidth,h=vp.clientHeight||1;
   renderer.setSize(w,h,false);
@@ -667,7 +788,10 @@ function resizeAll(){
 window.addEventListener('resize',resizeAll);
 if(window.ResizeObserver)new ResizeObserver(resizeAll).observe(vp);
 
+let _lastT=0;
 renderer.setAnimationLoop((t,frame)=>{
+  const dt=Math.min((t-_lastT)/1000,0.05); _lastT=t;
+
   if(frame&&S.hitSrc){
     const ref=renderer.xr.getReferenceSpace();
     const hits=frame.getHitTestResults(S.hitSrc);
@@ -680,6 +804,10 @@ renderer.setAnimationLoop((t,frame)=>{
     } else {reticleMesh.visible=false;}
   }
   if(!renderer.xr.isPresenting)controls.update();
+
+  // Animate user marker pulse
+  if(userMarker.group.visible) userMarker.update(dt);
+
   renderer.render(scene,camera);
   document.getElementById('zoom-val').textContent=camera.zoom.toFixed(2)+'×';
 });
@@ -727,21 +855,41 @@ window.placeAR=function(){
 function updateCameraOverlayMode(){
   const video=document.getElementById('cam-video');
   if(S.camStream){
+    // Camera ON: video behind, canvas transparent
     video.style.display='block';
     c3.style.background='transparent';
+    c3.style.cssText+='background:transparent!important;';
+    // Correct sequence for transparent WebGL overlay on Android Chrome
     renderer.setClearColor(0x000000,0);
     renderer.setClearAlpha(0);
     renderer.autoClear=true;
-    renderer.autoClearColor=true;
+    renderer.autoClearColor=false; // do NOT clear color — let video show through
     scene.background=null;
+    // Ensure z-index layering: video(0) → three-canvas(1) → draw-canvas(2)
+    video.style.zIndex='0';
+    c3.style.zIndex='1';
+    document.getElementById('draw-canvas').style.zIndex='2';
   } else {
+    // Camera OFF: restore opaque dark background
+    video.style.display='none';
+    c3.style.background='';
     renderer.setClearColor(0x0d1117,1);
     renderer.setClearAlpha(1);
     renderer.autoClear=true;
     renderer.autoClearColor=true;
+    scene.background=null;
   }
-  if(S.model){S.model.visible=true; zoomExtents();}
-  console.log('[ARPlan overlay]',{cameraActive:!!S.camStream, hasModel:!!S.model, modelVisible:S.model?.visible, rendererAlpha:renderer.getClearAlpha?.()});
+  if(S.model){
+    S.model.visible=true;
+    if(S.camStream) zoomExtents();
+  }
+  console.log('[ARPlan] updateCameraOverlayMode',{
+    cameraActive:!!S.camStream,
+    hasModel:!!S.model,
+    modelVisible:S.model?.visible,
+    autoClearColor:renderer.autoClearColor,
+    clearAlpha:renderer.getClearAlpha?.()
+  });
 }
 
 /* ── Camera passthrough (Android/iOS) ── */
@@ -821,7 +969,20 @@ window.toggleCamera=async function(){
 
   btn.classList.add('cam-active');
   lbl.textContent='Apagar Cámara';
-  updateCameraOverlayMode();
+
+  // Wait a frame for video to actually render before applying transparency
+  // This prevents the black-canvas flash on Android Chrome
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      updateCameraOverlayMode();
+      console.log('[Camera] stream active, overlay applied',{
+        videoReady: video.readyState,
+        videoWidth: video.videoWidth,
+        facingMode: stream.getVideoTracks()[0]?.getSettings()?.facingMode
+      });
+    });
+  });
+
   showToast('Cámara activa — modelo superpuesto','ok');
 };
 
@@ -1058,6 +1219,38 @@ function loadDXF(file){
       const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length;
       console.log('[DXF] Parsed:',{total,layers:parsed.layers,segments:parsed.segments.length,circles:parsed.circles.length,arcs:parsed.arcs.length,segments3D:parsed.segments.filter(s=>(s.z1||0)!==0||(s.z2||0)!==0).length,units:parsed.units||'inline-parser'});
       if(!total){showToast('DXF sin geometría visible','err');setProgress(0);return;}
+
+      // 3D detection statistics
+      const seg3D=parsed.segments.filter(s=>Math.abs(s.z1||0)>0.01||Math.abs(s.z2||0)>0.01).length;
+      const totalEnt=parsed.segments.length+parsed.circles.length+parsed.arcs.length+(parsed.texts?.length||0)+(parsed.points?.length||0);
+      const has3D=seg3D>0;
+      const pct3D=totalEnt>0?Math.round(seg3D/totalEnt*100):0;
+
+      // Bounding box in DXF space
+      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
+      parsed.segments.forEach(s=>{
+        minX=Math.min(minX,s.x1,s.x2);maxX=Math.max(maxX,s.x1,s.x2);
+        minY=Math.min(minY,s.y1,s.y2);maxY=Math.max(maxY,s.y1,s.y2);
+        minZ=Math.min(minZ,s.z1||0,s.z2||0);maxZ=Math.max(maxZ,s.z1||0,s.z2||0);
+      });
+
+      console.log('[DXF Statistics]',{
+        entidades2D: totalEnt-seg3D,
+        entidades3D: seg3D,
+        capas: parsed.layers.length,
+        bboxMin: {x:minX.toFixed(2),y:minY.toFixed(2),z:minZ.toFixed(2)},
+        bboxMax: {x:maxX.toFixed(2),y:maxY.toFixed(2),z:maxZ.toFixed(2)},
+        alturaTotal: (maxZ-minZ).toFixed(2)+'m',
+        unitFactor: parsed.unitFactor,
+        segments: parsed.segments.length,
+        circles: parsed.circles.length,
+        arcs: parsed.arcs.length,
+        texts: parsed.texts?.length||0,
+        points: parsed.points?.length||0,
+        porciento3D: pct3D+'%'
+      });
+
+      if(has3D) showToast(`DXF 3D detectado (${pct3D}% con Z)`, 'ok');
       buildDXFModel(parsed);
     }catch(err){console.error(err);showToast('Error DXF: '+err.message,'err');setProgress(0);}
   };
@@ -1106,6 +1299,43 @@ function buildDXFModel(parsed){
     const al=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(a.layer));
     al.userData.layer=a.layer; group.add(al); added++;
   });
+  // Render TEXT labels as sprites (visible in 3D)
+  if(parsed.texts&&parsed.texts.length>0){
+    const canvas2=document.createElement('canvas');canvas2.width=256;canvas2.height=64;
+    const ctx2=canvas2.getContext('2d');
+    const texMat=new THREE.SpriteMaterial({
+      map:new THREE.CanvasTexture(canvas2),
+      transparent:true,depthTest:false,sizeAttenuation:false
+    });
+    parsed.texts.forEach(t=>{
+      if(!t.text||t.text.length>80)return; // skip very long texts
+      ctx2.clearRect(0,0,256,64);
+      ctx2.fillStyle='rgba(0,0,0,0.55)';ctx2.fillRect(0,0,256,64);
+      ctx2.font='bold 18px monospace';ctx2.fillStyle=LM[t.layer]||'#f1f5f9';
+      ctx2.textAlign='center';ctx2.fillText(t.text.slice(0,24),128,40);
+      const tex=new THREE.CanvasTexture(canvas2.cloneNode());
+      ctx2.clearRect(0,0,256,64);
+      ctx2.fillStyle='rgba(0,0,0,0.55)';ctx2.fillRect(0,0,256,64);
+      ctx2.font='bold 18px monospace';ctx2.fillStyle=LM[t.layer]||'#f1f5f9';
+      ctx2.textAlign='center';ctx2.fillText(t.text.slice(0,24),128,40);
+      const newCtx=document.createElement('canvas');newCtx.width=256;newCtx.height=64;
+      const nc=newCtx.getContext('2d');nc.drawImage(canvas2,0,0);
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(newCtx),transparent:true,depthTest:false}));
+      const pos=toV(t.x,t.y,t.z||0);
+      sp.position.copy(pos);sp.scale.set(4,1,1);sp.userData.layer=t.layer;
+      group.add(sp);
+    });
+  }
+
+  // Render POINT entities as small spheres
+  if(parsed.points&&parsed.points.length>0&&parsed.points.length<5000){
+    const ptGeo=new THREE.SphereGeometry(0.1,4,4);
+    parsed.points.forEach(pt=>{
+      const mesh=new THREE.Mesh(ptGeo,new THREE.MeshBasicMaterial({color:LM[pt.layer]||'#f59e0b'}));
+      mesh.position.copy(toV(pt.x,pt.y,pt.z||0));mesh.userData.layer=pt.layer;group.add(mesh);
+    });
+  }
+
   if(!added){showToast('No se pudo construir geometría','err');setProgress(0);return;}
   const box=new THREE.Box3().setFromObject(group);
   if(box.isEmpty()){showToast('Bounding box vacío','err');setProgress(0);return;}
@@ -1140,13 +1370,27 @@ function buildDXFModel(parsed){
   if(IS_MOBILE&&added>50000)showToast('Modelo muy grande — puede ir lento en móvil','err');
 }
 
-/* ── DXF Parser ── */
+/* ── DXF Parser — Advanced 3D ── */
+function readINSUNITS(P){
+  // Read $INSUNITS from HEADER section → return meter factor
+  const factors={0:1,1:0.0254,2:0.3048,4:0.001,5:0.01,6:1,7:1,8:1609.344};
+  for(let i=0;i<P.length-1;i++){
+    if(P[i][0]===9&&P[i][1]==='$INSUNITS'){
+      const u=parseInt(P[i+1][1]||'0',10);
+      return factors[u]??1;
+    }
+  }
+  return 1; // default: meters
+}
+
 function parseDXF(text){
   const raw=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
   const P=[];
   for(let i=0;i+1<raw.length;i+=2){const c=parseInt(raw[i].trim(),10),v=raw[i+1].trim();if(!isNaN(c))P.push([c,v]);}
-  const res={segments:[],circles:[],arcs:[],layers:[]};
+  const unitFactor=readINSUNITS(P); // scale factor to meters
+  const res={segments:[],circles:[],arcs:[],texts:[],points:[],layers:[],unitFactor};
   const lset=new Set();
+  const stats={ent2d:0,ent3d:0,blocks:0,inserts:0,discarded:0,warnings:[]};
   // Read BLOCKS
   const blocks={};
   for(let bi=0;bi<P.length;bi++){
@@ -1260,6 +1504,73 @@ function readEnt(P,i,res,lset,blocks){
     }
     return i;
   }
+  // ── POLYFACE MESH (POLYLINE with flag 64) ────────────────────
+  if(type==='PFACE'||type==='POLYFACEMESH'){
+    // Skip — complex mesh topology, would need face index parsing
+    i++;while(i<P.length&&P[i][0]!==0)i++;return i;
+  }
+  // ── TEXT / MTEXT ──────────────────────────────────────────────
+  if(type==='TEXT'||type==='MTEXT'){
+    i++;let tx=0,ty=0,tz=0,txt='',layer='0',h=2.5;
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8)layer=v;if(c===10)tx=+v;if(c===20)ty=+v;if(c===30)tz=+v;
+      if(c===1||c===3)txt+=(txt?' ':'')+v.replace(/\{[^}]+\}/g,'').replace(/\\P/g,' ').trim();
+      if(c===40)h=+v;i++;
+    }
+    if(txt.trim())res.texts.push({x:tx,y:ty,z:tz,text:txt.trim(),height:h,layer});
+    lset.add(layer);return i;
+  }
+  // ── POINT ────────────────────────────────────────────────────
+  if(type==='POINT'){
+    i++;let px=0,py=0,pz=0,layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];if(c===8)layer=v;if(c===10)px=+v;if(c===20)py=+v;if(c===30)pz=+v;i++;
+    }
+    res.points.push({x:px,y:py,z:pz,layer});lset.add(layer);return i;
+  }
+  // ── SOLID / TRACE (filled quad) ──────────────────────────────
+  if(type==='SOLID'||type==='TRACE'){
+    i++;const vs=[[0,0,0],[0,0,0],[0,0,0],[0,0,0]];let layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];if(c===8)layer=v;
+      if(c>=10&&c<=13)vs[c-10][0]=+v;if(c>=20&&c<=23)vs[c-20][1]=+v;if(c>=30&&c<=33)vs[c-30][2]=+v;i++;
+    }
+    [[0,1],[1,3],[3,2],[2,0]].forEach(([a,b])=>{
+      const[x1,y1,z1]=vs[a],[x2,y2,z2]=vs[b];
+      if(Math.hypot(x2-x1,y2-y1,z2-z1)>1e-10)res.segments.push({x1,y1,z1,x2,y2,z2,layer});
+    });
+    lset.add(layer);return i;
+  }
+  // ── HATCH (skip body, parse boundary loops for lines) ────────
+  if(type==='HATCH'){
+    // Skip entire HATCH — boundary parsing is complex and rarely useful for AR
+    i++;while(i<P.length&&P[i][0]!==0)i++;return i;
+  }
+  // ── ELLIPSE ──────────────────────────────────────────────────
+  if(type==='ELLIPSE'){
+    i++;let cx=0,cy=0,cz=0,mxX=1,mxY=0,ratio=1,sa=0,ea=Math.PI*2,layer='0';
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];if(c===8)layer=v;
+      if(c===10)cx=+v;if(c===20)cy=+v;if(c===30)cz=+v;
+      if(c===11)mxX=+v;if(c===21)mxY=+v;if(c===40)ratio=+v;if(c===41)sa=+v;if(c===42)ea=+v;i++;
+    }
+    const majorR=Math.hypot(mxX,mxY);
+    const minorR=majorR*ratio;
+    const angle=Math.atan2(mxY,mxX);
+    const N=Math.max(32,Math.floor(majorR*4));
+    const pts=[];
+    for(let k=0;k<=N;k++){
+      const t=sa+(ea-sa)*k/N;
+      const lx=cx+majorR*Math.cos(t)*Math.cos(angle)-minorR*Math.sin(t)*Math.sin(angle);
+      const ly=cy+majorR*Math.cos(t)*Math.sin(angle)+minorR*Math.sin(t)*Math.cos(angle);
+      pts.push([lx,ly,cz]);
+    }
+    for(let j=0;j<pts.length-1;j++)
+      res.segments.push({x1:pts[j][0],y1:pts[j][1],z1:pts[j][2],x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2],layer});
+    lset.add(layer);return i;
+  }
+  // Unknown entity — skip
   i++;while(i<P.length&&P[i][0]!==0)i++;return i;
 }
 
@@ -1350,8 +1661,17 @@ window.setMode=function(m){
   S.mode=m;
   ['3d','ar','gps'].forEach(n=>document.getElementById('hbtn-'+n)?.classList.remove('active'));
   document.getElementById('hbtn-'+m)?.classList.add('active');
-  if(m==='gps'){setupGPSNavigationCamera();updateGeoModelFromGPS();}
-  if(m==='3d'){S.gpsNavActive=false;controls.enabled=true;}
+  if(m==='gps'){
+    setupGPSNavigationCamera();
+    updateGeoModelFromGPS();
+    userMarker?.show();
+  }
+  if(m==='3d'){
+    S.gpsNavActive=false;
+    controls.enabled=true;
+    // Keep marker visible in 3D view if GPS active
+    if(!S.gpsActive) userMarker?.hide();
+  }
 };
 
 /* ── Tool system ── */
@@ -1531,6 +1851,33 @@ function updateNavPanel(u,near){
   if(q('nav-brg'))q('nav-brg').textContent=near?`${near.bearing.toFixed(0)}°`:'—';
   if(q('nav-calib'))q('nav-calib').textContent=`E ${(S.calibDE||0).toFixed(1)} / N ${(S.calibDN||0).toFixed(1)} m`;
   if(q('heading-offset-val'))q('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;
+  // Rotate compass rose to show north
+  const compassSvg=q('compass-rose');
+  if(compassSvg){
+    compassSvg.classList.toggle('active', S.gpsActive);
+    const heading=S.heading??0;
+    compassSvg.querySelector('svg').style.transform=`rotate(${heading}deg)`;
+  }
+  // Update user position label
+  const ulbl=q('user-label-pill');
+  if(ulbl&&u&&S.gpsActive){
+    ulbl.id='user-label-pill';
+    ulbl.classList.add('active');
+    const acc=Math.round(S.gpsPos?.accuracy||0);
+    ulbl.style.display='block';
+    ulbl.textContent=`📍 Yo  ±${acc}m`;
+  } else if(ulbl) ulbl.style.display='none';
+
+  // Update field HUD overlay
+  const navHud=q('nav-hud');
+  if(navHud&&S.gpsNavActive){
+    navHud.style.display='flex';
+    if(q('nav-hud-utm'))q('nav-hud-utm').textContent=u?`${u.zone}  E:${u.e.toFixed(0)}  N:${u.n.toFixed(0)}`:'GPS calculando…';
+    if(q('nav-hud-near')&&near)q('nav-hud-near').textContent=`▶ ${near.label}`;
+    if(q('nav-hud-dist')&&near)q('nav-hud-dist').textContent=`${near.dist.toFixed(0)} m  •  Rumbo: ${near.bearing.toFixed(0)}°`;
+  } else if(navHud) {
+    navHud.style.display='none';
+  }
 }
 function effectiveHeading(){
   if(S.heading==null)return null;
@@ -1567,10 +1914,26 @@ function updateGeoModelFromGPS(){
   // Usuario = origen móvil. DXF/GLB se dibuja alrededor del usuario según coordenadas reales.
   S.model.position.set(o.e-u.e,0,-(o.n-u.n));
 
+  // Update user position marker (Waze blue dot)
+  if(userMarker){
+    // User is always at scene origin (model moves around user)
+    // Marker sits at 0,0,0 in scene = user position
+    userMarker.setPosition(0, 0, 0);
+    if(S.heading!=null) userMarker.setHeading(effectiveHeading()??0);
+    else userMarker.setHeading(0);
+    // Scale accuracy ring to GPS accuracy in scene units
+    if(S.gpsPos){
+      const accM=S.gpsPos.accuracy||10;
+      const accScaled=S.geoLock?accM:accM*(S.zf||1);
+      userMarker.setAccuracyRadius(Math.min(accScaled,50));
+    }
+    userMarker.show();
+  }
+
   if(S.gpsNavActive){
     setupGPSNavigationCamera();
     const eh=effectiveHeading();
-    if(eh!=null) camera.rotation.y=-THREE.MathUtils.degToRad(eh); // Three.js mira al norte con yaw 0; rumbo horario debe ir con signo negativo
+    if(eh!=null) camera.rotation.y=-THREE.MathUtils.degToRad(eh);
   }
 
   const near=nearestGeoTarget(u);
@@ -1605,6 +1968,7 @@ window.toggleGPS=function(){
     document.getElementById('latlon-pill').style.display='none';
     document.getElementById('gps-toggle-btn').innerHTML='<i class="ti ti-current-location"></i> Activar GPS';
     document.getElementById('btn-gps').classList.remove('active');
+    if(userMarker) userMarker.hide();
     showToast('GPS desactivado');return;
   }
   if(!navigator.geolocation){showToast('GPS no soportado','err');return;}
@@ -1774,6 +2138,28 @@ window.startARSurface=async function(){
   const btn=ARButton.createButton(renderer,{requiredFeatures:['hit-testing'],optionalFeatures:['dom-overlay'],domOverlay:{root:document.getElementById('hud')}});
   document.body.appendChild(btn);btn.style.display='none';btn.click();setTimeout(()=>btn.remove(),500);
   setMode('ar');
+};
+
+/* ── Center view on user position (like Waze re-center) ── */
+window.centerOnUser=function(){
+  if(!S.gpsActive||!S.gpsPos){
+    showToast('Activa el GPS primero','err');
+    return;
+  }
+  if(!S.geoLock||!S.model){
+    showToast('Activa el modo GPS/UTM primero','err');
+    return;
+  }
+  // Switch to top-down view centered on user (origin)
+  const h=S.heading??0;
+  controls.enabled=true;
+  controls.target.set(0,0,0);
+  camera.position.set(0,30,0.001); // top-down
+  camera.zoom=1;
+  camera.updateProjectionMatrix();
+  controls.update();
+  userMarker.show();
+  showToast('Vista centrada en tu posición','ok');
 };
 
 window.startARGPS=function(){
