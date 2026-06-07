@@ -588,7 +588,7 @@ const S={
   undoStack:[],
   gpsActive:false, gpsWatch:null, gpsPos:null, heading:null,
   projLat:null, projLon:null,
-  utmZone:'19S', utmE:null, utmN:null, geoLock:false, lastDXFText:null, modelIsDXF:false, gridMode:0,
+  utmZone:'19S', utmE:null, utmN:null, geoLock:false, gpsNavActive:false, eyeHeight:1.65, lastDXFText:null, modelIsDXF:false, gridMode:0,
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
@@ -1090,10 +1090,18 @@ function buildDXFModel(parsed){
     group.position.set(-ctr.x*sc,-ctr.y*sc,-ctr.z*sc);
   }
   S.model=group; S.modelIsDXF=true; scene.add(group);
+  group.userData.geoBBox=getDXFBBox(parsed);
   if(S.geoLock) updateGeoModelFromGPS();
   const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
   updateLayers(layObjs.length?layObjs:[{name:'0',color:'#3b82f6',visible:true}]);
-  setProgress(0); zoomExtents();updateCameraOverlayMode();
+  setProgress(0);
+  if(S.geoLock){
+    setupGPSNavigationCamera();
+    updateGeoModelFromGPS();
+  } else {
+    zoomExtents();
+  }
+  updateCameraOverlayMode();
   const bb=new THREE.Box3().setFromObject(group), bs=bb.getSize(new THREE.Vector3());
   console.log('[DXF Statistics]',{entidadesRenderizadas:added,capas:layObjs.length,bboxMin:bb.min,bboxMax:bb.max,altura:bs.y,escala:S.zf, geoLock:S.geoLock, coordOrigin});
   showToast(`DXF: ${added} entidades, ${layObjs.length} capas`,'ok');
@@ -1257,11 +1265,19 @@ window.loadTestDXF=function(){
 
 /* ── Camera / View controls ── */
 window.zoomExtents=function(){
+  // En modo navegación GPS/UTM no se debe hacer zoom-extents: la cámara representa al usuario en terreno.
+  if(S.geoLock && S.gpsNavActive){
+    setupGPSNavigationCamera();
+    updateGeoModelFromGPS();
+    showToast('Modo GPS/UTM: cámara fija en tu posición');
+    return;
+  }
   if(!S.model){camera.position.set(0,15,20);controls.target.set(0,0,0);controls.update();return;}
   const box=new THREE.Box3().setFromObject(S.model);
   const ctr=box.getCenter(new THREE.Vector3());
   const sz=box.getSize(new THREE.Vector3());
   const d=Math.max(sz.x,sz.y,sz.z,1);
+  controls.enabled=true;
   controls.target.copy(ctr);
   camera.position.copy(ctr.clone().add(new THREE.Vector3(0,d*1.2,d*1.5)));
   camera.zoom=1;camera.updateProjectionMatrix();controls.update();
@@ -1298,6 +1314,8 @@ window.setMode=function(m){
   S.mode=m;
   ['3d','ar','gps'].forEach(n=>document.getElementById('hbtn-'+n)?.classList.remove('active'));
   document.getElementById('hbtn-'+m)?.classList.add('active');
+  if(m==='gps'){setupGPSNavigationCamera();updateGeoModelFromGPS();}
+  if(m==='3d'){S.gpsNavActive=false;controls.enabled=true;}
 };
 
 /* ── Tool system ── */
@@ -1423,18 +1441,60 @@ function getDXFLocalOrigin(parsed){
   }
   return {e:minE,n:minN};
 }
+function getDXFBBox(parsed){
+  let minE=Infinity,minN=Infinity,maxE=-Infinity,maxN=-Infinity;
+  const add=(e,n)=>{if(isFinite(e)&&isFinite(n)){minE=Math.min(minE,e);minN=Math.min(minN,n);maxE=Math.max(maxE,e);maxN=Math.max(maxN,n);}};
+  (parsed.segments||[]).forEach(s=>{add(s.x1,s.y1);add(s.x2,s.y2);});
+  (parsed.circles||[]).forEach(c=>{add(c.cx-c.r,c.cy-c.r);add(c.cx+c.r,c.cy+c.r);});
+  (parsed.arcs||[]).forEach(a=>{add(a.cx-a.r,a.cy-a.r);add(a.cx+a.r,a.cy+a.r);});
+  if(!isFinite(minE))return null;
+  return {minE,minN,maxE,maxN,centerE:(minE+maxE)/2,centerN:(minN+maxN)/2};
+}
+function setupGPSNavigationCamera(){
+  if(!S.geoLock)return;
+  S.gpsNavActive=true;
+  controls.enabled=false;
+  camera.zoom=1;
+  camera.fov=65;
+  camera.near=.02;
+  camera.far=5000;
+  camera.position.set(0,S.eyeHeight,0);
+  camera.rotation.order='YXZ';
+  camera.updateProjectionMatrix();
+}
+function horizontalDistanceToGeoBBox(u,b){
+  if(!b)return null;
+  const ce=Math.max(b.minE,Math.min(u.e,b.maxE));
+  const cn=Math.max(b.minN,Math.min(u.n,b.maxN));
+  return Math.hypot(ce-u.e,cn-u.n);
+}
+function bearingDeg(fromE,fromN,toE,toN){
+  const de=toE-fromE,dn=toN-fromN;
+  return (THREE.MathUtils.radToDeg(Math.atan2(de,dn))+360)%360;
+}
 function updateGeoModelFromGPS(){
   if(!S.geoLock||!S.model||!S.gpsPos||!S.model.userData.geoOrigin)return;
   const u=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
   const o=S.model.userData.geoOrigin;
+
+  // La escena queda en coordenadas relativas al usuario: usuario = (0,0,0).
+  // Un punto DXF E/N se ve en Three.js como: X=E_usuario_relativo, Z=-(N_usuario_relativo).
   S.model.position.set(o.e-u.e,0,-(o.n-u.n));
-  const dist=Math.hypot(o.e-u.e,o.n-u.n);
-  document.getElementById('xyz-pill').textContent=`UTM ${u.zone} E ${u.e.toFixed(2)} N ${u.n.toFixed(2)} | origen a ${dist.toFixed(1)} m`;
-  if(S.heading!=null){
-    camera.rotation.order='YXZ';
-    camera.rotation.y=THREE.MathUtils.degToRad(S.heading);
+
+  if(S.gpsNavActive){
+    setupGPSNavigationCamera();
+    if(S.heading!=null) camera.rotation.y=THREE.MathUtils.degToRad(S.heading);
   }
-  console.log('[GPS/UTM]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,modelPosition:S.model.position});
+
+  const bbox=S.model.userData.geoBBox;
+  const distBBox=horizontalDistanceToGeoBBox(u,bbox);
+  const targetE=bbox?bbox.centerE:o.e, targetN=bbox?bbox.centerN:o.n;
+  const brg=bearingDeg(u.e,u.n,targetE,targetN);
+  const distOrigin=Math.hypot(o.e-u.e,o.n-u.n);
+  const acc=Math.round(S.gpsPos.accuracy||0);
+
+  document.getElementById('xyz-pill').textContent=`GPS/UTM ${u.zone} | ±${acc} m | distancia ${distBBox!=null?distBBox.toFixed(1):distOrigin.toFixed(1)} m | rumbo ${brg.toFixed(0)}°`;
+  console.log('[GPS/UTM NAV]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,bbox,distBBox,bearing:brg,modelPosition:S.model.position,camera:{pos:camera.position,heading:S.heading}});
 }
 function rebuildDXFForGeoMode(){
   if(S.modelIsDXF&&S.lastDXFText){
@@ -1511,8 +1571,12 @@ window.applyProjCoords=function(){
   if(!isNaN(lat)&&!isNaN(lon)){S.projLat=lat;S.projLon=lon;}
   if(S.geoLock && (!isFinite(S.utmE)||!isFinite(S.utmN))){showToast('UTM activo: si dejas E/N vacío usaré el mínimo del DXF','ok');}
   rebuildDXFForGeoMode();
+  if(S.geoLock){
+    S.gpsNavActive=true;
+    setupGPSNavigationCamera();
+  }
   updateGeoModelFromGPS();
-  showToast(S.geoLock?'GPS/UTM real aplicado':'Coordenadas guardadas','ok');
+  showToast(S.geoLock?'GPS/UTM real aplicado: camina para acercarte al DXF':'Coordenadas guardadas','ok');
 };
 
 // Compass
@@ -1521,6 +1585,7 @@ window.applyProjCoords=function(){
     let v=e.webkitCompassHeading!=null?e.webkitCompassHeading:e.alpha!=null?(360-e.alpha)%360:null;
     if(v===null)return;
     S.heading=Math.round(v);
+    if(S.gpsNavActive) updateGeoModelFromGPS();
     document.getElementById('hdg-txt').textContent=`N ${S.heading}°`;
     document.getElementById('g-hdg').textContent=S.heading+'°';
   };
@@ -1568,13 +1633,20 @@ window.startARSurface=async function(){
 window.startARGPS=function(){
   if(!S.gpsActive){showToast('Activa el GPS primero','err');toggleGPS();return;}
   if(!S.model){showToast('Carga un modelo primero','err');return;}
+  if(!S.camStream && IS_MOBILE){
+    // Pide cámara para usarla como fondo. Si el usuario no concede permiso, igual queda el modo navegación GPS.
+    toggleCamera().catch(()=>{});
+  }
   if(!S.geoLock){
     document.getElementById('geo-lock').checked=true;
     applyProjCoords();
   }
+  S.gpsNavActive=true;
+  setupGPSNavigationCamera();
   updateCameraOverlayMode();
   updateGeoModelFromGPS();
-  setMode('gps');showToast('AR GPS/UTM activo: precisión depende del GPS','ok');
+  setMode('gps');
+  showToast('Navegación GPS/UTM activa: el usuario es el origen 0,0,0','ok');
 };
 
 /* ── Screenshot ── */
