@@ -495,6 +495,10 @@ html,body{width:100%;height:100%;overflow:hidden;
       <div style="font-size:10px;color:var(--text3);margin-top:6px">Ajuste de brújula: si el dibujo apunta corrido, corrige manualmente.</div>
       <input type="range" min="-180" max="180" value="0" id="heading-offset" style="width:100%" oninput="setHeadingOffset(this.value)">
       <div class="grow"><span style="color:var(--text3)">Offset rumbo</span><span class="gval" id="heading-offset-val">0°</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Calibración visual: ajusta hasta que el plano calce con la imagen de la cámara.</div>
+      <input type="range" min="45" max="95" value="72" id="camera-fov" style="width:100%" oninput="setCameraFov(this.value)">
+      <div class="grow"><span style="color:var(--text3)">FOV cámara</span><span class="gval" id="camera-fov-val">72°</span></div>
+      <div class="grow"><span style="color:var(--text3)">Filtro GPS máx.</span><input id="max-gps-acc" value="6" inputmode="decimal" onchange="setMaxGpsAccuracy(this.value)" style="width:52px;height:24px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px"><span class="gval">m</span></div>
     </div>
   </div>
 </div>
@@ -562,7 +566,7 @@ html,body{width:100%;height:100%;overflow:hidden;
     'toggleGrid','togglePanel','toggleGPS','setOrigin','applyProjCoords',
     'startARSurface','startARGPS','placeAR','toggleCamera',
     'doScreenshot','undoStroke','redoStroke','saveProject',
-    'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset'];
+    'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset','setCameraFov','setMaxGpsAccuracy'];
   var Q={};
   FNAMES.forEach(function(n){
     Q[n]=[];
@@ -610,7 +614,7 @@ const S={
   projLat:null, projLon:null,
   utmZone:'19S', utmE:null, utmN:null, geoLock:false, gpsNavActive:false, eyeHeight:1.65, lastDXFText:null, modelIsDXF:false, gridMode:0,
   calibDE:parseFloat(localStorage.getItem('arplan_calib_de')||'0')||0, calibDN:parseFloat(localStorage.getItem('arplan_calib_dn')||'0')||0,
-  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, lastUserUTM:null, gpsTrail:[],
+  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, cameraFov:parseFloat(localStorage.getItem('arplan_camera_fov')||'72')||72, maxGpsAccuracy:parseFloat(localStorage.getItem('arplan_max_gps_acc')||'6')||6, gpsFilterAlpha:0.35, lastUserUTM:null, filteredUserUTM:null, gpsTrail:[],
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
@@ -1336,6 +1340,8 @@ function applyGridMode(){
 window.toggleGrid=function(){
   S.gridMode=(S.gridMode+1)%3;
   if(document.getElementById('heading-offset')){document.getElementById('heading-offset').value=String(S.headingOffset||0);document.getElementById('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;}
+if(document.getElementById('camera-fov')){document.getElementById('camera-fov').value=String(S.cameraFov||72);document.getElementById('camera-fov-val').textContent=`${Math.round(S.cameraFov||72)}°`;camera.fov=S.cameraFov||72;camera.updateProjectionMatrix();}
+if(document.getElementById('max-gps-acc'))document.getElementById('max-gps-acc').value=String(S.maxGpsAccuracy||6);
 updateNavPanel(null,null);
 applyGridMode();
   showToast(['Grilla completa','Grilla tenue','Grilla oculta'][S.gridMode]);
@@ -1491,11 +1497,22 @@ function dedupeGeoTargets(arr){
 }
 function correctedUserUTM(){
   if(!S.gpsPos)return null;
-  const u=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
-  u.rawE=u.e; u.rawN=u.n;
+  const raw=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
+  const u={...raw, rawE:raw.e, rawN:raw.n};
   u.e+=S.calibDE||0; u.n+=S.calibDN||0;
-  S.lastUserUTM=u;
-  return u;
+
+  // Filtro simple para que el modelo no salte aunque Android reporte 1-2 m.
+  // Se acepta rápido si es la primera lectura; luego se suaviza en metros UTM.
+  if(!S.filteredUserUTM || S.filteredUserUTM.zone!==u.zone){
+    S.filteredUserUTM={...u};
+  }else{
+    const a=S.gpsFilterAlpha||0.35;
+    S.filteredUserUTM.e=S.filteredUserUTM.e*(1-a)+u.e*a;
+    S.filteredUserUTM.n=S.filteredUserUTM.n*(1-a)+u.n*a;
+    S.filteredUserUTM.rawE=u.rawE; S.filteredUserUTM.rawN=u.rawN; S.filteredUserUTM.zone=u.zone;
+  }
+  S.lastUserUTM={...S.filteredUserUTM};
+  return S.lastUserUTM;
 }
 function nearestGeoTarget(u){
   const targets=S.model?.userData?.geoTargets||[];
@@ -1524,7 +1541,7 @@ function setupGPSNavigationCamera(){
   S.gpsNavActive=true;
   controls.enabled=false;
   camera.zoom=1;
-  camera.fov=65;
+  camera.fov=S.cameraFov||72;
   camera.near=.02;
   camera.far=5000;
   camera.position.set(0,S.eyeHeight,0);
@@ -1553,7 +1570,7 @@ function updateGeoModelFromGPS(){
   if(S.gpsNavActive){
     setupGPSNavigationCamera();
     const eh=effectiveHeading();
-    if(eh!=null) camera.rotation.y=THREE.MathUtils.degToRad(eh);
+    if(eh!=null) camera.rotation.y=-THREE.MathUtils.degToRad(eh); // Three.js mira al norte con yaw 0; rumbo horario debe ir con signo negativo
   }
 
   const near=nearestGeoTarget(u);
@@ -1593,6 +1610,12 @@ window.toggleGPS=function(){
   if(!navigator.geolocation){showToast('GPS no soportado','err');return;}
   showToast('Solicitando GPS…');
   const ok=pos=>{
+    const accRaw=Number(pos.coords.accuracy||9999);
+    const maxAcc=Number(S.maxGpsAccuracy||6);
+    if(S.gpsNavActive && accRaw>maxAcc){
+      document.getElementById('gps-txt').textContent=`±${Math.round(accRaw)}m (filtrado)`;
+      return;
+    }
     S.gpsActive=true;S.gpsPos=pos.coords;
     const lat=pos.coords.latitude.toFixed(6),lon=pos.coords.longitude.toFixed(6);
     const acc=Math.round(pos.coords.accuracy);
@@ -1688,6 +1711,18 @@ window.setHeadingOffset=function(v){
   localStorage.setItem('arplan_heading_offset',String(S.headingOffset));
   const el=document.getElementById('heading-offset-val'); if(el)el.textContent=`${Math.round(S.headingOffset)}°`;
   updateGeoModelFromGPS();
+};
+window.setCameraFov=function(v){
+  S.cameraFov=Math.max(45,Math.min(95,parseFloat(v)||72));
+  localStorage.setItem('arplan_camera_fov',String(S.cameraFov));
+  camera.fov=S.cameraFov; camera.updateProjectionMatrix();
+  const el=document.getElementById('camera-fov-val'); if(el)el.textContent=`${Math.round(S.cameraFov)}°`;
+};
+window.setMaxGpsAccuracy=function(v){
+  S.maxGpsAccuracy=Math.max(1,Math.min(50,parseFloat(v)||6));
+  localStorage.setItem('arplan_max_gps_acc',String(S.maxGpsAccuracy));
+  const el=document.getElementById('max-gps-acc'); if(el)el.value=String(S.maxGpsAccuracy);
+  showToast(`Filtro GPS: ±${S.maxGpsAccuracy} m`,'ok');
 };
 
 // Compass
@@ -1836,6 +1871,8 @@ if('serviceWorker'in navigator&&_swOk){
 /* ── Init ── */
 resizeAll();
 if(document.getElementById('heading-offset')){document.getElementById('heading-offset').value=String(S.headingOffset||0);document.getElementById('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;}
+if(document.getElementById('camera-fov')){document.getElementById('camera-fov').value=String(S.cameraFov||72);document.getElementById('camera-fov-val').textContent=`${Math.round(S.cameraFov||72)}°`;camera.fov=S.cameraFov||72;camera.updateProjectionMatrix();}
+if(document.getElementById('max-gps-acc'))document.getElementById('max-gps-acc').value=String(S.maxGpsAccuracy||6);
 updateNavPanel(null,null);
 applyGridMode();
 setView('iso');
