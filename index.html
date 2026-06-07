@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro — Navegación AR + UTM</title>
+<title>ARPlan Pro — Navegación AR + UTM corregido</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
@@ -875,7 +875,13 @@ window.placeAR=function(){
 function updateCameraOverlayMode(){
   const video=document.getElementById('cam-video');
   if(S.camStream){
-    // Camera ON: video behind, canvas transparent
+    // Camera ON: video behind, canvas transparent.
+    // El mapa verificador debe apagarse, si no queda encima de la cámara.
+    if(S.mapActive){
+      S.mapActive=false;
+      document.getElementById('map-check')?.classList.remove('active');
+      document.getElementById('btn-map')?.classList.remove('active');
+    }
     video.style.display='block';
     c3.style.background='transparent';
     c3.style.cssText+='background:transparent!important;';
@@ -963,6 +969,13 @@ window.toggleCamera=async function(){
       <p>• En iOS Safari: Ajustes → Safari → Cámara → Permitir</p>
       <div class="modal-btns"><button class="btn-pri" onclick="closeModal()">Entendido</button></div>`);
     return;
+  }
+
+  // Si el mapa OSM estaba abierto, cerrarlo antes de mostrar la cámara.
+  if(S.mapActive){
+    S.mapActive=false;
+    document.getElementById('map-check')?.classList.remove('active');
+    document.getElementById('btn-map')?.classList.remove('active');
   }
 
   S.camStream=stream;
@@ -1777,9 +1790,21 @@ window.toggleLayer=function(name){const l=S.layers.find(x=>x.name===name);if(l){
 
 /* ── UTM/GPS georreferenciado ── */
 function parseUTMZone(z){
-  const m=String(z||'19S').trim().toUpperCase().match(/^(\d{1,2})([C-X])?$/);
+  // En Chile normalmente el usuario escribe "19S" queriendo decir ZONA 19 HEMISFERIO SUR.
+  // Ojo: en la nomenclatura oficial MGRS la letra S es banda norte, pero para terreno/UTM
+  // lo más común en DXF/GPS es usar N/S como hemisferio. Por eso aquí 19S = Sur.
+  const raw=String(z||'19S').trim().toUpperCase().replace(/\s+/g,'');
+  const m=raw.match(/^(\d{1,2})([A-Z]*)$/);
   const zone=m?Math.max(1,Math.min(60,parseInt(m[1],10))):19;
-  const hem=(m&&m[2]&&m[2]>='N')?'N':'S';
+  const suf=(m&&m[2])?m[2]:'';
+  let hem='S';
+  if(suf==='N'||suf==='NORTE'||suf==='NORTH') hem='N';
+  else if(suf==='S'||suf==='SUR'||suf==='SOUTH'||suf==='') hem='S';
+  else {
+    // Si alguien usa banda UTM real: C-M = Sur, N-X = Norte.
+    const band=suf[0];
+    hem=(band>='N')?'N':'S';
+  }
   return {zone,hem,label:String(zone)+hem};
 }
 function latLonToUTM(lat,lon,zoneOverride){
@@ -1834,7 +1859,12 @@ function ensureMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     maxZoom:22, attribution:'&copy; OpenStreetMap'
   }).addTo(S.map);
-  S.map.setView([-33.45,-70.66],17);
+  // No enviar el mapa a coordenadas inventadas. Primero intentar usuario/proyecto; si no hay GPS aún, Santiago como vista neutra.
+  const u=S.lastUserUTM||correctedUserUTM();
+  const b=projectLatLngBounds?.();
+  if(u){const ll=utmToLatLon(u.e,u.n,u.zone); S.map.setView([ll.lat,ll.lon],19);}
+  else if(b) S.map.fitBounds(b,{padding:[40,40],maxZoom:21});
+  else S.map.setView([-33.45,-70.66],17);
   setTimeout(()=>S.map.invalidateSize(),80);
   return S.map;
 }
@@ -2098,8 +2128,11 @@ window.toggleGPS=function(){
   };
   const err=e=>{
     const msgs={1:'Permiso GPS denegado.',2:'Sin señal GPS.',3:'Timeout GPS.'};
-    showToast(msgs[e.code]||'Error GPS','err');
+    const secure=(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1');
+    const extra=secure?'':' Usa HTTPS o localhost; el GPS no funciona desde archivo local/http.';
+    showToast((msgs[e.code]||'Error GPS')+extra,'err');
     document.getElementById('gdot').className='gps-dot';
+    document.getElementById('gps-txt').textContent='GPS error';
   };
   navigator.geolocation.getCurrentPosition(ok,err,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
   S.gpsWatch=navigator.geolocation.watchPosition(ok,err,{enableHighAccuracy:true,maximumAge:3000,timeout:20000});
