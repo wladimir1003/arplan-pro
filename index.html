@@ -9,6 +9,7 @@
 <title>ARPlan Pro — Navegación AR + UTM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
 /* ── Reset ── */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -137,6 +138,22 @@ html,body{width:100%;height:100%;overflow:hidden;
 }
 #three-canvas{position:absolute;inset:0;width:100%!important;height:100%!important;z-index:1;display:block;background:transparent!important;}
 #draw-canvas{position:absolute;inset:0;z-index:2;display:block;touch-action:none;}
+
+/* ── Mapa verificador OSM/UTM ── */
+#map-check{
+  position:absolute;inset:0;z-index:4;display:none;
+  background:#111827;
+}
+#map-check.active{display:block;}
+#map-check .leaflet-container{background:#111827;}
+.map-tools{
+  position:absolute;top:8px;left:8px;z-index:500;
+  display:flex;gap:6px;flex-wrap:wrap;pointer-events:all;
+}
+.map-tools button{
+  background:rgba(0,0,0,.72);color:#dbeafe;border:1px solid rgba(255,255,255,.18);
+  border-radius:18px;padding:6px 11px;font-size:11px;font-family:inherit;cursor:pointer;
+}
 
 /* ── HUD ── */
 #hud{position:absolute;inset:0;z-index:3;pointer-events:none;}
@@ -342,6 +359,7 @@ html,body{width:100%;height:100%;overflow:hidden;
 
   <!-- GPS & AR -->
   <button class="tb-btn" id="btn-gps" onclick="toggleGPS()" title="GPS"><i class="ti ti-current-location"></i></button>
+  <button class="tb-btn" id="btn-map" onclick="toggleMapCheck()" title="Mapa verificador OSM/UTM"><i class="ti ti-map-2"></i></button>
   <button class="tb-btn" onclick="centerOnUser()" title="Centrar en mi posición" style="color:#22c55e"><i class="ti ti-crosshair"></i></button>
   <button class="tb-btn" onclick="startARSurface()" title="AR Superficie" style="color:#6ee7b7"><i class="ti ti-augmented-reality"></i></button>
   <div class="tb-sep"></div>
@@ -382,6 +400,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   <video id="cam-video" playsinline muted autoplay></video>
   <canvas id="three-canvas"></canvas>
   <canvas id="draw-canvas"></canvas>
+  <div id="map-check"><div class="map-tools"><button onclick="toggleMapCheck()">Cerrar mapa</button><button onclick="fitMapToProject()">Ver proyecto</button><button onclick="fitMapToUser()">Ver usuario</button></div><div id="leaflet-map" style="position:absolute;inset:0"></div></div>
 
   <!-- HUD -->
   <div id="hud">
@@ -614,7 +633,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   // Stub all module functions
   var FNAMES=['handleFile','triggerOpen','loadDemo','loadTestDXF',
     'zoomIn','zoomOut','zoomExtents','setView','setTool','setMode',
-    'toggleGrid','togglePanel','toggleGPS','setOrigin','applyProjCoords',
+    'toggleGrid','togglePanel','toggleGPS','toggleMapCheck','fitMapToProject','fitMapToUser','setOrigin','applyProjCoords',
     'startARSurface','startARGPS','placeAR','toggleCamera',
     'doScreenshot','undoStroke','redoStroke','saveProject',
     'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset','setCameraFov','setMaxGpsAccuracy'];
@@ -639,6 +658,7 @@ html,body{width:100%;height:100%;overflow:hidden;
 })();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"}}</script>
 
 <script type="module">
@@ -665,7 +685,7 @@ const S={
   projLat:null, projLon:null,
   utmZone:'19S', utmE:null, utmN:null, geoLock:false, gpsNavActive:false, eyeHeight:1.65, lastDXFText:null, modelIsDXF:false, gridMode:0,
   calibDE:parseFloat(localStorage.getItem('arplan_calib_de')||'0')||0, calibDN:parseFloat(localStorage.getItem('arplan_calib_dn')||'0')||0,
-  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, cameraFov:parseFloat(localStorage.getItem('arplan_camera_fov')||'72')||72, maxGpsAccuracy:parseFloat(localStorage.getItem('arplan_max_gps_acc')||'6')||6, gpsFilterAlpha:0.35, lastUserUTM:null, filteredUserUTM:null, gpsTrail:[],
+  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, cameraFov:parseFloat(localStorage.getItem('arplan_camera_fov')||'72')||72, maxGpsAccuracy:parseFloat(localStorage.getItem('arplan_max_gps_acc')||'6')||6, gpsFilterAlpha:0.35, lastUserUTM:null, filteredUserUTM:null, gpsTrail:[], map:null, mapUserMarker:null, mapProjectLayer:null, mapActive:false,
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
@@ -1783,6 +1803,83 @@ function latLonToUTM(lat,lon,zoneOverride){
   if(lat<0)North+=10000000;
   return {e:E,n:North,zone:z.label};
 }
+
+function utmToLatLon(E,N,zoneOverride){
+  const z=parseUTMZone(zoneOverride||S.utmZone);
+  const a=6378137.0, f=1/298.257223563, k0=0.9996;
+  const e=Math.sqrt(f*(2-f));
+  const e1=(1-Math.sqrt(1-e*e))/(1+Math.sqrt(1-e*e));
+  const x=E-500000;
+  let y=N; if(z.hem==='S') y-=10000000;
+  const lon0=((z.zone-1)*6-180+3);
+  const M=y/k0;
+  const mu=M/(a*(1-e*e/4-3*Math.pow(e,4)/64-5*Math.pow(e,6)/256));
+  const phi1=mu+(3*e1/2-27*Math.pow(e1,3)/32)*Math.sin(2*mu)
+    +(21*e1*e1/16-55*Math.pow(e1,4)/32)*Math.sin(4*mu)
+    +(151*Math.pow(e1,3)/96)*Math.sin(6*mu)
+    +(1097*Math.pow(e1,4)/512)*Math.sin(8*mu);
+  const ep2=e*e/(1-e*e);
+  const C1=ep2*Math.cos(phi1)**2;
+  const T1=Math.tan(phi1)**2;
+  const N1=a/Math.sqrt(1-e*e*Math.sin(phi1)**2);
+  const R1=a*(1-e*e)/Math.pow(1-e*e*Math.sin(phi1)**2,1.5);
+  const D=x/(N1*k0);
+  const lat=phi1-(N1*Math.tan(phi1)/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*Math.pow(D,4)/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*Math.pow(D,6)/720);
+  const lon=(D-(1+2*T1+C1)*Math.pow(D,3)/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*Math.pow(D,5)/120)/Math.cos(phi1);
+  return {lat:THREE.MathUtils.radToDeg(lat), lon:lon0+THREE.MathUtils.radToDeg(lon)};
+}
+function ensureMap(){
+  if(S.map || !window.L)return S.map;
+  S.map=L.map('leaflet-map',{zoomControl:true,attributionControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:22, attribution:'&copy; OpenStreetMap'
+  }).addTo(S.map);
+  S.map.setView([-33.45,-70.66],17);
+  setTimeout(()=>S.map.invalidateSize(),80);
+  return S.map;
+}
+function projectLatLngBounds(){
+  const b=S.model?.userData?.geoBBox; if(!b)return null;
+  const p1=utmToLatLon(b.minE,b.minN,S.utmZone);
+  const p2=utmToLatLon(b.maxE,b.maxN,S.utmZone);
+  return [[Math.min(p1.lat,p2.lat),Math.min(p1.lon,p2.lon)],[Math.max(p1.lat,p2.lat),Math.max(p1.lon,p2.lon)]];
+}
+function updateMapOverlay(){
+  if(!S.map)return;
+  const u=S.lastUserUTM||correctedUserUTM();
+  if(u){
+    const ll=utmToLatLon(u.e,u.n,u.zone);
+    if(!S.mapUserMarker)S.mapUserMarker=L.circleMarker([ll.lat,ll.lon],{radius:8,weight:2,fillOpacity:.8}).addTo(S.map).bindPopup('Tu posición GPS corregida');
+    else S.mapUserMarker.setLatLng([ll.lat,ll.lon]);
+  }
+  const bounds=projectLatLngBounds();
+  if(bounds){
+    if(S.mapProjectLayer)S.mapProjectLayer.remove();
+    S.mapProjectLayer=L.rectangle(bounds,{weight:2,fillOpacity:.08}).addTo(S.map).bindPopup('Extensión del DXF/Proyecto');
+  }
+}
+window.toggleMapCheck=function(){
+  const el=document.getElementById('map-check');
+  S.mapActive=!S.mapActive;
+  el?.classList.toggle('active',S.mapActive);
+  document.getElementById('btn-map')?.classList.toggle('active',S.mapActive);
+  if(S.mapActive){
+    ensureMap(); updateMapOverlay(); setTimeout(()=>{S.map?.invalidateSize(); window.fitMapToProject();},120);
+    showToast('Mapa verificador OSM/UTM activo','ok');
+  }
+};
+window.fitMapToProject=function(){
+  if(!ensureMap())return; updateMapOverlay();
+  const b=projectLatLngBounds();
+  if(b)S.map.fitBounds(b,{padding:[40,40],maxZoom:21});
+  else window.fitMapToUser();
+};
+window.fitMapToUser=function(){
+  if(!ensureMap())return; updateMapOverlay();
+  const u=S.lastUserUTM||correctedUserUTM();
+  if(u){const ll=utmToLatLon(u.e,u.n,u.zone);S.map.setView([ll.lat,ll.lon],20);}
+};
+
 function getDXFLocalOrigin(parsed){
   if(S.geoLock && isFinite(S.utmE) && isFinite(S.utmN)) return {e:S.utmE,n:S.utmN};
   let minE=Infinity,minN=Infinity;
@@ -1946,6 +2043,7 @@ function updateGeoModelFromGPS(){
   const quality=acc<=5?'buena':acc<=12?'media':'baja';
 
   updateNavPanel(u,near);
+  updateMapOverlay();
   document.getElementById('xyz-pill').textContent=`RECORRIDO ${u.zone} | GPS ${quality} ±${acc} m | ${near?near.label:'DXF'} ${dist.toFixed(1)} m | rumbo ${brg.toFixed(0)}°`;
   if(S.debug) console.log('[FIELD NAV]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,nearest:near,bbox,dist,bearing:brg,modelPosition:S.model.position,heading:S.heading,headingOffset:S.headingOffset,effectiveHeading:effectiveHeading()});
 }
