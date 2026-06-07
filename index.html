@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro</title>
+<title>ARPlan Pro — Recorrido UTM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
 <style>
@@ -475,6 +475,26 @@ html,body{width:100%;height:100%;overflow:hidden;
         <input type="checkbox" id="geo-lock"> Usar coordenadas UTM reales del DXF
       </label>
       <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar GPS/UTM</button>
+      <button class="dz-ghost" onclick="startFieldWalk()" style="width:100%;font-size:11px;padding:7px;background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.35);color:#6ee7b7"><i class="ti ti-route"></i> Iniciar recorrido en terreno</button>
+      <div class="gcard" style="margin-top:6px">
+        <div class="grow"><span>UTM usuario</span><span class="gval" id="nav-utm">—</span></div>
+        <div class="grow"><span>Objeto cercano</span><span class="gval" id="nav-near">—</span></div>
+        <div class="grow"><span>Distancia</span><span class="gval" id="nav-dist">—</span></div>
+        <div class="grow"><span>Rumbo</span><span class="gval" id="nav-brg">—</span></div>
+        <div class="grow"><span>Corrección</span><span class="gval" id="nav-calib">—</span></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">
+        Calibración: párate sobre un punto conocido del plano, escribe sus coordenadas UTM y pulsa calibrar. Esto corrige el error GPS del celular.
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <input id="calib-e" placeholder="E punto conocido" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="calib-n" placeholder="N punto conocido" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+      </div>
+      <button class="dz-ghost" onclick="calibrateHere()" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-crosshair"></i> Calibrar aquí</button>
+      <button class="dz-ghost" onclick="clearCalibration()" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-eraser"></i> Limpiar calibración</button>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Ajuste de brújula: si el dibujo apunta corrido, corrige manualmente.</div>
+      <input type="range" min="-180" max="180" value="0" id="heading-offset" style="width:100%" oninput="setHeadingOffset(this.value)">
+      <div class="grow"><span style="color:var(--text3)">Offset rumbo</span><span class="gval" id="heading-offset-val">0°</span></div>
     </div>
   </div>
 </div>
@@ -542,7 +562,7 @@ html,body{width:100%;height:100%;overflow:hidden;
     'toggleGrid','togglePanel','toggleGPS','setOrigin','applyProjCoords',
     'startARSurface','startARGPS','placeAR','toggleCamera',
     'doScreenshot','undoStroke','redoStroke','saveProject',
-    'addObservation','exportObsPDF','toggleLayer'];
+    'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset'];
   var Q={};
   FNAMES.forEach(function(n){
     Q[n]=[];
@@ -589,6 +609,8 @@ const S={
   gpsActive:false, gpsWatch:null, gpsPos:null, heading:null,
   projLat:null, projLon:null,
   utmZone:'19S', utmE:null, utmN:null, geoLock:false, gpsNavActive:false, eyeHeight:1.65, lastDXFText:null, modelIsDXF:false, gridMode:0,
+  calibDE:parseFloat(localStorage.getItem('arplan_calib_de')||'0')||0, calibDN:parseFloat(localStorage.getItem('arplan_calib_dn')||'0')||0,
+  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, lastUserUTM:null, gpsTrail:[],
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
@@ -1051,8 +1073,11 @@ function buildDXFModel(parsed){
   };
   let added=0;
   const coordOrigin=getDXFLocalOrigin(parsed);
+  const geoTargets=[];
+  const addTarget=(e,n,label,type)=>{if(isFinite(e)&&isFinite(n))geoTargets.push({e,n,label,type});};
   const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, -(y-coordOrigin.n));
-  parsed.segments.forEach(s=>{
+  parsed.segments.forEach((s,idx)=>{
+    addTarget(s.x1,s.y1,`LINE ${idx+1} A`,s.layer||'LINE'); addTarget(s.x2,s.y2,`LINE ${idx+1} B`,s.layer||'LINE');
     // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=-Norte.
     const p1=toV(s.x1, s.y1, s.z1||0);
     const p2=toV(s.x2, s.y2, s.z2||0);
@@ -1060,13 +1085,15 @@ function buildDXFModel(parsed){
     const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1,p2]),mat(s.layer));
     ln.userData.layer=s.layer; group.add(ln); added++;
   });
-  parsed.circles.forEach(c=>{
+  parsed.circles.forEach((c,idx)=>{
+    addTarget(c.cx,c.cy,`CIRCLE ${idx+1}`,c.layer||'CIRCLE');
     const pts=[],N=Math.max(32,Math.floor(c.r*4)),cz=c.cz||0;
     for(let i=0;i<=N;i++){const a=i/N*Math.PI*2;pts.push(toV(c.cx+Math.cos(a)*c.r,c.cy+Math.sin(a)*c.r,cz));}
     const cl=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat(c.layer));
     cl.userData.layer=c.layer; group.add(cl); added++;
   });
-  parsed.arcs.forEach(a=>{
+  parsed.arcs.forEach((a,idx)=>{
+    addTarget(a.cx,a.cy,`ARC ${idx+1}`,a.layer||'ARC');
     const pts=[],az=a.cz||0;
     let s0=a.startAngle*Math.PI/180,e0=a.endAngle*Math.PI/180;
     if(e0<=s0)e0+=Math.PI*2;
@@ -1091,6 +1118,7 @@ function buildDXFModel(parsed){
   }
   S.model=group; S.modelIsDXF=true; scene.add(group);
   group.userData.geoBBox=getDXFBBox(parsed);
+  group.userData.geoTargets=dedupeGeoTargets(geoTargets);
   if(S.geoLock) updateGeoModelFromGPS();
   const layObjs=parsed.layers.map(n=>({name:n,color:LM[n]||'#3b82f6',visible:true}));
   updateLayers(layObjs.length?layObjs:[{name:'0',color:'#3b82f6',visible:true}]);
@@ -1307,7 +1335,9 @@ function applyGridMode(){
 }
 window.toggleGrid=function(){
   S.gridMode=(S.gridMode+1)%3;
-  applyGridMode();
+  if(document.getElementById('heading-offset')){document.getElementById('heading-offset').value=String(S.headingOffset||0);document.getElementById('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;}
+updateNavPanel(null,null);
+applyGridMode();
   showToast(['Grilla completa','Grilla tenue','Grilla oculta'][S.gridMode]);
 };
 window.setMode=function(m){
@@ -1450,6 +1480,45 @@ function getDXFBBox(parsed){
   if(!isFinite(minE))return null;
   return {minE,minN,maxE,maxN,centerE:(minE+maxE)/2,centerN:(minN+maxN)/2};
 }
+
+function dedupeGeoTargets(arr){
+  const seen=new Set(), out=[];
+  arr.forEach(t=>{
+    const k=(Math.round(t.e*10)/10)+'|'+(Math.round(t.n*10)/10)+'|'+(t.type||'');
+    if(!seen.has(k)){seen.add(k);out.push(t);}
+  });
+  return out.slice(0,5000);
+}
+function correctedUserUTM(){
+  if(!S.gpsPos)return null;
+  const u=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
+  u.rawE=u.e; u.rawN=u.n;
+  u.e+=S.calibDE||0; u.n+=S.calibDN||0;
+  S.lastUserUTM=u;
+  return u;
+}
+function nearestGeoTarget(u){
+  const targets=S.model?.userData?.geoTargets||[];
+  let best=null,bd=Infinity;
+  targets.forEach(t=>{const d=Math.hypot(t.e-u.e,t.n-u.n); if(d<bd){bd=d;best=t;}});
+  if(best)return {...best,dist:bd,bearing:bearingDeg(u.e,u.n,best.e,best.n)};
+  const b=S.model?.userData?.geoBBox;
+  if(!b)return null;
+  return {label:'Centro DXF',type:'DXF',e:b.centerE,n:b.centerN,dist:Math.hypot(b.centerE-u.e,b.centerN-u.n),bearing:bearingDeg(u.e,u.n,b.centerE,b.centerN)};
+}
+function updateNavPanel(u,near){
+  const q=id=>document.getElementById(id);
+  if(q('nav-utm'))q('nav-utm').textContent=u?`${u.zone} E ${u.e.toFixed(1)} N ${u.n.toFixed(1)}`:'—';
+  if(q('nav-near'))q('nav-near').textContent=near?`${near.label}`:'—';
+  if(q('nav-dist'))q('nav-dist').textContent=near?`${near.dist.toFixed(1)} m`:'—';
+  if(q('nav-brg'))q('nav-brg').textContent=near?`${near.bearing.toFixed(0)}°`:'—';
+  if(q('nav-calib'))q('nav-calib').textContent=`E ${(S.calibDE||0).toFixed(1)} / N ${(S.calibDN||0).toFixed(1)} m`;
+  if(q('heading-offset-val'))q('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;
+}
+function effectiveHeading(){
+  if(S.heading==null)return null;
+  return (S.heading+(S.headingOffset||0)+360)%360;
+}
 function setupGPSNavigationCamera(){
   if(!S.geoLock)return;
   S.gpsNavActive=true;
@@ -1474,27 +1543,31 @@ function bearingDeg(fromE,fromN,toE,toN){
 }
 function updateGeoModelFromGPS(){
   if(!S.geoLock||!S.model||!S.gpsPos||!S.model.userData.geoOrigin)return;
-  const u=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
+  const u=correctedUserUTM();
+  if(!u)return;
   const o=S.model.userData.geoOrigin;
 
-  // La escena queda en coordenadas relativas al usuario: usuario = (0,0,0).
-  // Un punto DXF E/N se ve en Three.js como: X=E_usuario_relativo, Z=-(N_usuario_relativo).
+  // Usuario = origen móvil. DXF/GLB se dibuja alrededor del usuario según coordenadas reales.
   S.model.position.set(o.e-u.e,0,-(o.n-u.n));
 
   if(S.gpsNavActive){
     setupGPSNavigationCamera();
-    if(S.heading!=null) camera.rotation.y=THREE.MathUtils.degToRad(S.heading);
+    const eh=effectiveHeading();
+    if(eh!=null) camera.rotation.y=THREE.MathUtils.degToRad(eh);
   }
 
+  const near=nearestGeoTarget(u);
   const bbox=S.model.userData.geoBBox;
   const distBBox=horizontalDistanceToGeoBBox(u,bbox);
-  const targetE=bbox?bbox.centerE:o.e, targetN=bbox?bbox.centerN:o.n;
-  const brg=bearingDeg(u.e,u.n,targetE,targetN);
-  const distOrigin=Math.hypot(o.e-u.e,o.n-u.n);
+  const targetE=near?near.e:(bbox?bbox.centerE:o.e), targetN=near?near.n:(bbox?bbox.centerN:o.n);
+  const brg=near?near.bearing:bearingDeg(u.e,u.n,targetE,targetN);
+  const dist=near?near.dist:(distBBox!=null?distBBox:Math.hypot(o.e-u.e,o.n-u.n));
   const acc=Math.round(S.gpsPos.accuracy||0);
+  const quality=acc<=5?'buena':acc<=12?'media':'baja';
 
-  document.getElementById('xyz-pill').textContent=`GPS/UTM ${u.zone} | ±${acc} m | distancia ${distBBox!=null?distBBox.toFixed(1):distOrigin.toFixed(1)} m | rumbo ${brg.toFixed(0)}°`;
-  console.log('[GPS/UTM NAV]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,bbox,distBBox,bearing:brg,modelPosition:S.model.position,camera:{pos:camera.position,heading:S.heading}});
+  updateNavPanel(u,near);
+  document.getElementById('xyz-pill').textContent=`RECORRIDO ${u.zone} | GPS ${quality} ±${acc} m | ${near?near.label:'DXF'} ${dist.toFixed(1)} m | rumbo ${brg.toFixed(0)}°`;
+  if(S.debug) console.log('[FIELD NAV]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,nearest:near,bbox,dist,bearing:brg,modelPosition:S.model.position,heading:S.heading,headingOffset:S.headingOffset,effectiveHeading:effectiveHeading()});
 }
 function rebuildDXFForGeoMode(){
   if(S.modelIsDXF&&S.lastDXFText){
@@ -1577,6 +1650,44 @@ window.applyProjCoords=function(){
   }
   updateGeoModelFromGPS();
   showToast(S.geoLock?'GPS/UTM real aplicado: camina para acercarte al DXF':'Coordenadas guardadas','ok');
+};
+
+window.startFieldWalk=function(){
+  if(!S.model){showToast('Carga primero el DXF o GLB','err');return;}
+  document.getElementById('geo-lock').checked=true;
+  S.geoLock=true; S.gpsNavActive=true;
+  if(!S.gpsActive)toggleGPS();
+  if(!S.camStream && IS_MOBILE)toggleCamera().catch(()=>{});
+  applyProjCoords();
+  setupGPSNavigationCamera();
+  updateCameraOverlayMode();
+  updateGeoModelFromGPS();
+  setMode('gps');
+  showToast('Recorrido activo: camina y mira distancia/rumbo','ok');
+};
+window.calibrateHere=function(){
+  if(!S.gpsPos){showToast('Activa GPS y espera una posición válida','err');return;}
+  const ce=parseFloat(document.getElementById('calib-e')?.value);
+  const cn=parseFloat(document.getElementById('calib-n')?.value);
+  if(!isFinite(ce)||!isFinite(cn)){showToast('Ingresa E y N del punto conocido','err');return;}
+  const raw=latLonToUTM(S.gpsPos.latitude,S.gpsPos.longitude,S.utmZone);
+  S.calibDE=ce-raw.e; S.calibDN=cn-raw.n;
+  localStorage.setItem('arplan_calib_de',String(S.calibDE));
+  localStorage.setItem('arplan_calib_dn',String(S.calibDN));
+  updateGeoModelFromGPS();
+  showToast(`Calibrado: corrección E ${S.calibDE.toFixed(1)} / N ${S.calibDN.toFixed(1)} m`,'ok');
+};
+window.clearCalibration=function(){
+  S.calibDE=0; S.calibDN=0;
+  localStorage.removeItem('arplan_calib_de'); localStorage.removeItem('arplan_calib_dn');
+  updateGeoModelFromGPS(); updateNavPanel(S.lastUserUTM,null);
+  showToast('Calibración eliminada','ok');
+};
+window.setHeadingOffset=function(v){
+  S.headingOffset=parseFloat(v)||0;
+  localStorage.setItem('arplan_heading_offset',String(S.headingOffset));
+  const el=document.getElementById('heading-offset-val'); if(el)el.textContent=`${Math.round(S.headingOffset)}°`;
+  updateGeoModelFromGPS();
 };
 
 // Compass
@@ -1724,6 +1835,8 @@ if('serviceWorker'in navigator&&_swOk){
 
 /* ── Init ── */
 resizeAll();
+if(document.getElementById('heading-offset')){document.getElementById('heading-offset').value=String(S.headingOffset||0);document.getElementById('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;}
+updateNavPanel(null,null);
 applyGridMode();
 setView('iso');
 setTimeout(()=>{
