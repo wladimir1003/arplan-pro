@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro — Navegación AR + UTM corregido</title>
+<title>ARPlan Pro — Navegación AR + UTM corregido v2</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
@@ -141,8 +141,19 @@ html,body{width:100%;height:100%;overflow:hidden;
 
 /* ── Mapa verificador OSM/UTM ── */
 #map-check{
-  position:absolute;inset:0;z-index:4;display:none;
+  position:absolute;
+  left:10px;
+  bottom:10px;
+  width:min(330px, calc(100% - 20px));
+  height:min(240px, 36vh);
+  z-index:2;
+  display:none;
   background:#111827;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 8px 28px rgba(0,0,0,.45);
+  pointer-events:auto;
 }
 #map-check.active{display:block;}
 #map-check .leaflet-container{background:#111827;}
@@ -400,7 +411,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   <video id="cam-video" playsinline muted autoplay></video>
   <canvas id="three-canvas"></canvas>
   <canvas id="draw-canvas"></canvas>
-  <div id="map-check"><div class="map-tools"><button onclick="toggleMapCheck()">Cerrar mapa</button><button onclick="fitMapToProject()">Ver proyecto</button><button onclick="fitMapToUser()">Ver usuario</button></div><div id="leaflet-map" style="position:absolute;inset:0"></div></div>
+  <div id="map-check"><div class="map-tools"><button onclick="toggleMapCheck()">Cerrar mapa</button><button onclick="fitMapToProject()">Ver proyecto</button><button onclick="fitMapToUser()">Ver usuario</button></div><div id="leaflet-map" style="position:absolute;inset:0;width:100%;height:100%"></div></div>
 
   <!-- HUD -->
   <div id="hud">
@@ -907,7 +918,9 @@ function updateCameraOverlayMode(){
   }
   if(S.model){
     S.model.visible=true;
-    if(S.camStream) zoomExtents();
+    // No usar zoomExtents al activar cámara: en archivos 3D/GLB puede alejar la cámara
+    // y romper la vista GPS/AR. La cámara debe quedarse en el usuario si gpsNavActive.
+    if(S.camStream && S.gpsNavActive) setupGPSNavigationCamera();
   }
   console.log('[ARPlan] updateCameraOverlayMode',{
     cameraActive:!!S.camStream,
@@ -1225,7 +1238,7 @@ function loadGLTF(file){
   const url=URL.createObjectURL(file);setProgress(30);
   gltfLoader.load(url,gltf=>{
     setProgress(80);if(S.model)scene.remove(S.model);
-    S.model=gltf.scene; S.modelIsDXF=false; normObj(S.model,20);scene.add(S.model);
+    S.model=gltf.scene; S.modelIsDXF=false; normObj(S.model,20); applyManualGeoToModel(); scene.add(S.model);
     URL.revokeObjectURL(url);setProgress(0);zoomExtents();updateCameraOverlayMode();
     console.log('[GLB/GLTF] cargado',{file:file.name, bbox:new THREE.Box3().setFromObject(S.model)});
     showToast('Modelo: '+file.name,'ok');
@@ -1697,7 +1710,7 @@ window.setMode=function(m){
   if(m==='gps'){
     setupGPSNavigationCamera();
     updateGeoModelFromGPS();
-    userMarker?.show();
+    userMarker?.hide();
   }
   if(m==='3d'){
     S.gpsNavActive=false;
@@ -1890,6 +1903,10 @@ function updateMapOverlay(){
 }
 window.toggleMapCheck=function(){
   const el=document.getElementById('map-check');
+  if(S.camStream && !S.mapActive){
+    showToast('Apaga la cámara para abrir el mapa verificador','err');
+    return;
+  }
   S.mapActive=!S.mapActive;
   el?.classList.toggle('active',S.mapActive);
   document.getElementById('btn-map')?.classList.toggle('active',S.mapActive);
@@ -1987,7 +2004,7 @@ function updateNavPanel(u,near){
   }
   // Update user position label
   const ulbl=q('user-label-pill');
-  if(ulbl&&u&&S.gpsActive){
+  if(ulbl&&u&&S.gpsActive&&!S.gpsNavActive&&!S.camStream){
     ulbl.id='user-label-pill';
     ulbl.classList.add('active');
     const acc=Math.round(S.gpsPos?.accuracy||0);
@@ -2041,20 +2058,22 @@ function updateGeoModelFromGPS(){
   // Usuario = origen móvil. DXF/GLB se dibuja alrededor del usuario según coordenadas reales.
   S.model.position.set(o.e-u.e,0,-(o.n-u.n));
 
-  // Update user position marker (Waze blue dot)
+  // Marcador del usuario: en modo cámara/GPS el usuario es la cámara,
+  // por eso NO debe dibujarse delante de la vista porque tapa el modelo.
   if(userMarker){
-    // User is always at scene origin (model moves around user)
-    // Marker sits at 0,0,0 in scene = user position
-    userMarker.setPosition(0, 0, 0);
-    if(S.heading!=null) userMarker.setHeading(effectiveHeading()??0);
-    else userMarker.setHeading(0);
-    // Scale accuracy ring to GPS accuracy in scene units
-    if(S.gpsPos){
-      const accM=S.gpsPos.accuracy||10;
-      const accScaled=S.geoLock?accM:accM*(S.zf||1);
-      userMarker.setAccuracyRadius(Math.min(accScaled,50));
+    if(S.gpsNavActive || S.camStream){
+      userMarker.hide();
+    }else{
+      userMarker.setPosition(0, 0, 0);
+      if(S.heading!=null) userMarker.setHeading(effectiveHeading()??0);
+      else userMarker.setHeading(0);
+      if(S.gpsPos){
+        const accM=S.gpsPos.accuracy||10;
+        const accScaled=S.geoLock?accM:accM*(S.zf||1);
+        userMarker.setAccuracyRadius(Math.min(accScaled,15));
+      }
+      userMarker.show();
     }
-    userMarker.show();
   }
 
   if(S.gpsNavActive){
@@ -2077,12 +2096,32 @@ function updateGeoModelFromGPS(){
   document.getElementById('xyz-pill').textContent=`RECORRIDO ${u.zone} | GPS ${quality} ±${acc} m | ${near?near.label:'DXF'} ${dist.toFixed(1)} m | rumbo ${brg.toFixed(0)}°`;
   if(S.debug) console.log('[FIELD NAV]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,nearest:near,bbox,dist,bearing:brg,modelPosition:S.model.position,heading:S.heading,headingOffset:S.headingOffset,effectiveHeading:effectiveHeading()});
 }
+function applyManualGeoToModel(){
+  if(!S.model)return false;
+  const zone=parseUTMZone(document.getElementById('utm-zone')?.value||S.utmZone||'19S').label;
+  const e=parseFloat(document.getElementById('utm-e')?.value);
+  const n=parseFloat(document.getElementById('utm-n')?.value);
+  S.utmZone=zone;
+  if(isFinite(e))S.utmE=e;
+  if(isFinite(n))S.utmN=n;
+  if(isFinite(S.utmE)&&isFinite(S.utmN)){
+    S.model.userData.geoOrigin={e:S.utmE,n:S.utmN,zone:S.utmZone};
+    const box=new THREE.Box3().setFromObject(S.model);
+    const size=box.getSize(new THREE.Vector3());
+    S.model.userData.geoBBox={minE:S.utmE,minN:S.utmN,maxE:S.utmE+Math.max(size.x,1),maxN:S.utmN+Math.max(size.z,1),centerE:S.utmE+Math.max(size.x,1)/2,centerN:S.utmN+Math.max(size.z,1)/2};
+    S.model.userData.geoTargets=[{label:'Modelo 3D',type:'GLB',e:S.utmE,n:S.utmN}];
+    return true;
+  }
+  return false;
+}
+
 function rebuildDXFForGeoMode(){
   if(S.modelIsDXF&&S.lastDXFText){
     try{buildDXFModel(parseDXF(S.lastDXFText));}
     catch(e){console.error(e);showToast('No se pudo reconstruir DXF UTM','err');}
   }else if(S.model){
-    showToast('UTM real se aplica mejor a DXF coordenado; GLB requiere origen manual','err');
+    if(applyManualGeoToModel()) showToast('Origen UTM aplicado al modelo 3D','ok');
+    else showToast('Para GLB/GLTF ingresa UTM Este/Norte del elemento y pulsa Aplicar GPS/UTM','err');
   }
 }
 
@@ -2293,12 +2332,12 @@ window.centerOnUser=function(){
   showToast('Vista centrada en tu posición','ok');
 };
 
-window.startARGPS=function(){
+window.startARGPS=async function(){
   if(!S.gpsActive){showToast('Activa el GPS primero','err');toggleGPS();return;}
   if(!S.model){showToast('Carga un modelo primero','err');return;}
   if(!S.camStream && IS_MOBILE){
     // Pide cámara para usarla como fondo. Si el usuario no concede permiso, igual queda el modo navegación GPS.
-    toggleCamera().catch(()=>{});
+    try{ await toggleCamera(); }catch(_){ }
   }
   if(!S.geoLock){
     document.getElementById('geo-lock').checked=true;
