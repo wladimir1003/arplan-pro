@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro — AR GPS/UTM corregido</title>
+<title>ARPlan Pro — AR GPS/UTM definitivo</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
 <style>
@@ -540,7 +540,7 @@ html,body{width:100%;height:100%;overflow:hidden;
         <input type="checkbox" id="geo-lock"> Usar coordenadas UTM reales del proyecto
       </label>
       <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.45">
-        Ejes corregidos: DXF X=Este, DXF Y=Norte, Z=Cota. En planta: Norte arriba y Este a la derecha.
+        Ejes corregidos: DXF X=Este, DXF Y=Norte, Z=Cota. Internamente Norte=-Z para no ver el dibujo desde abajo; en pantalla Norte arriba y Este a la derecha.
       </div>
       <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar GPS/UTM</button>
       <button class="dz-ghost" onclick="startFieldWalk()" style="width:100%;font-size:11px;padding:7px;background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.35);color:#6ee7b7"><i class="ti ti-route"></i> Iniciar recorrido en terreno</button>
@@ -1310,9 +1310,9 @@ function loadDXF(file){
 /*
   CONVENCIÓN DEFINITIVA DE EJES
   - DXF X / UTM Este  -> Three X
-  - DXF Y / UTM Norte -> Three Z
+  - DXF Y / UTM Norte -> Three -Z
   - DXF Z / Cota      -> Three Y
-  Así el plano no queda invertido ni visto desde abajo.
+  Se usa -Z para Norte porque Three.js es diestro. Esto evita que el DXF se vea como desde abajo.
 */
 function buildDXFModel(parsed){
   if(S.model)scene.remove(S.model);
@@ -1331,10 +1331,10 @@ function buildDXFModel(parsed){
   const addTarget=(e,n,label,type)=>{if(isFinite(e)&&isFinite(n))geoTargets.push({e,n,label,type});};
   // Mapeo correcto DXF/UTM → Three.js:
   // DXF X = Este  → Three X positivo (derecha)
-  // DXF Y = Norte → Three Z positivo.
+  // DXF Y = Norte → Three Z NEGATIVO.
   // DXF Z = Cota   → Three Y positivo (altura).
-  // Este/Norte quedan directos, sin espejo y sin verlo desde abajo.
-  const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, y-coordOrigin.n);
+  // Importante: usar -Norte mantiene el sistema diestro y corrige el efecto de verlo desde abajo.
+  const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, -(y-coordOrigin.n));
   // Render 3DFACE entities as translucent surfaces, not only wireframe.
   const faceMatCache={};
   const faceMat=layer=>{
@@ -1357,7 +1357,7 @@ function buildDXFModel(parsed){
   });
   parsed.segments.forEach((s,idx)=>{
     addTarget(s.x1,s.y1,`LINE ${idx+1} A`,s.layer||'LINE'); addTarget(s.x2,s.y2,`LINE ${idx+1} B`,s.layer||'LINE');
-    // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=Norte.
+    // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=-Norte.
     const p1=toV(s.x1, s.y1, s.z1||0);
     const p2=toV(s.x2, s.y2, s.z2||0);
     if(p1.distanceTo(p2)<1e-10)return;
@@ -1748,8 +1748,8 @@ window.setView=function(v){
   controls.target.copy(ctr);
   if(v==='top'){
     // Vista planta con Norte arriba:
-    // Norte del DXF está en Three +Z; el vector up de cámara debe ser +Z.
-    camera.up.set(0,0,1);
+    // Norte del DXF está en Three -Z; el vector up de cámara debe ser -Z.
+    camera.up.set(0,0,-1);
     camera.position.set(ctr.x,ctr.y+d*2,ctr.z+.001);
     camera.lookAt(ctr);
   }else{
@@ -2057,8 +2057,9 @@ function updateGeoModelFromGPS(){
   const o=S.model.userData.geoOrigin;
 
   // Usuario = origen móvil. DXF/GLB se dibuja alrededor del usuario según coordenadas reales.
+  // Como Norte se representa en Three como -Z, la traslación Z debe ser u.n - o.n.
   const baseY=(!S.modelIsDXF && S.glbGeo)?(S.glbGeo.base||0):0;
-  S.model.position.set(o.e-u.e,baseY,o.n-u.n);
+  S.model.position.set(o.e-u.e,baseY,u.n-o.n);
 
   // Update user position marker (Waze blue dot)
   if(userMarker){
@@ -2116,11 +2117,11 @@ function applyGLBGeoTransform(silent=false){
   }
 
   // Se asume que el GLB está modelado en metros locales: X=Este, Y=Altura, Z=Norte.
-  // En la escena usamos Z negativo para Norte, por eso el movimiento geográfico se corrige en updateGeoModelFromGPS().
+  // En la escena usamos Z negativo para Norte; por eso se invierte Z del GLB al georreferenciar.
   S.model.userData.geoOrigin={e:g.e,n:g.n,zone:S.utmZone,type:'GLB'};
   S.model.userData.geoBBox=null;
   S.model.userData.geoTargets=[{e:g.e,n:g.n,label:'Origen GLB',type:'GLB'}];
-  S.model.scale.setScalar(g.scale);
+  S.model.scale.set(g.scale,g.scale,-g.scale);
   S.model.rotation.set(0,-THREE.MathUtils.degToRad(g.rot),0);
   S.model.position.set(0,g.base,0);
   S.zf=g.scale;
@@ -2322,8 +2323,8 @@ function applyDevicePoseToCamera(force=false){
 
   if(posture==='horizontal'){
     // Modo plano/mapa: teléfono acostado. Norte arriba y Este a la derecha.
-    // El DXF se mapea Norte = +Z; por eso la cámara superior usa up = +Z.
-    camera.up.set(0,0,1);
+    // El DXF se mapea Norte = -Z; por eso la cámara superior usa up = -Z.
+    camera.up.set(0,0,-1);
     camera.position.set(0,35,0.001);
     camera.lookAt(0,0,0);
     // Al usar brújula, rotamos la vista para que el plano gire como mapa de navegación.
@@ -2447,7 +2448,7 @@ window.centerOnUser=function(){
   const h=S.heading??0;
   controls.enabled=true;
   controls.target.set(0,0,0);
-  camera.up.set(0,0,1);
+  camera.up.set(0,0,-1);
   camera.position.set(0,30,0.001); // top-down, Norte arriba
   camera.zoom=1;
   camera.updateProjectionMatrix();
