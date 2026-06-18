@@ -539,6 +539,9 @@ html,body{width:100%;height:100%;overflow:hidden;
       <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);margin-top:6px">
         <input type="checkbox" id="geo-lock"> Usar coordenadas UTM reales del proyecto
       </label>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.45">
+        Ejes corregidos: DXF X=Este, DXF Y=Norte, Z=Cota. En planta: Norte arriba y Este a la derecha.
+      </div>
       <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar GPS/UTM</button>
       <button class="dz-ghost" onclick="startFieldWalk()" style="width:100%;font-size:11px;padding:7px;background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.35);color:#6ee7b7"><i class="ti ti-route"></i> Iniciar recorrido en terreno</button>
       <button class="dz-ghost" onclick="toggleUserMarker()" id="user-marker-btn" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-point"></i> Ocultar punto usuario</button>
@@ -1319,6 +1322,11 @@ function buildDXFModel(parsed){
   const coordOrigin=getDXFLocalOrigin(parsed);
   const geoTargets=[];
   const addTarget=(e,n,label,type)=>{if(isFinite(e)&&isFinite(n))geoTargets.push({e,n,label,type});};
+  // Mapeo correcto DXF/UTM → Three.js:
+  // DXF X = Este  → Three X positivo (derecha)
+  // DXF Y = Norte → Three Z negativo, porque en vista superior la parte alta de pantalla es -Z.
+  // DXF Z = Cota   → Three Y positivo (altura).
+  // NO invertir Este/Norte: esto evita que el plano quede espejado o al revés.
   const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, -(y-coordOrigin.n));
   // Render 3DFACE entities as translucent surfaces, not only wireframe.
   const faceMatCache={};
@@ -1731,8 +1739,17 @@ window.setView=function(v){
   const sz=box.getSize(new THREE.Vector3());
   const d=Math.max(sz.x,sz.y,sz.z,1)*1.6;
   controls.target.copy(ctr);
-  if(v==='top')camera.position.set(ctr.x,ctr.y+d*2,ctr.z+.001);
-  else          camera.position.set(ctr.x+d,ctr.y+d,ctr.z+d);
+  if(v==='top'){
+    // Vista planta con Norte arriba:
+    // como Norte del DXF está en Three -Z, el vector up de cámara debe ser -Z.
+    camera.up.set(0,0,-1);
+    camera.position.set(ctr.x,ctr.y+d*2,ctr.z+.001);
+    camera.lookAt(ctr);
+  }else{
+    camera.up.set(0,1,0);
+    camera.position.set(ctr.x+d,ctr.y+d,ctr.z+d);
+    camera.lookAt(ctr);
+  }
   camera.zoom=1;camera.updateProjectionMatrix();controls.update();
   document.querySelectorAll('[id^=btn-top],[id^=btn-iso]').forEach(b=>b.classList.remove('active'));
   const btn=document.getElementById('btn-'+v);if(btn)btn.classList.add('active');
@@ -1888,9 +1905,18 @@ function latLonToUTM(lat,lon,zoneOverride){
 function getDXFLocalOrigin(parsed){
   if(S.geoLock && isFinite(S.utmE) && isFinite(S.utmN)) return {e:S.utmE,n:S.utmN};
   let minE=Infinity,minN=Infinity;
-  (parsed.segments||[]).forEach(s=>{minE=Math.min(minE,s.x1,s.x2);minN=Math.min(minN,s.y1,s.y2);});
-  (parsed.circles||[]).forEach(c=>{minE=Math.min(minE,c.cx-c.r);minN=Math.min(minN,c.cy-c.r);});
-  (parsed.arcs||[]).forEach(a=>{minE=Math.min(minE,a.cx-a.r);minN=Math.min(minN,a.cy-a.r);});
+  const add=(e,n)=>{
+    // Ignora cabeceras POLYLINE falsas o puntos vacíos 0,0 que no pertenecen al terreno.
+    if(!isFinite(e)||!isFinite(n))return;
+    if(Math.abs(e)<1e-9 && Math.abs(n)<1e-9)return;
+    minE=Math.min(minE,e); minN=Math.min(minN,n);
+  };
+  (parsed.segments||[]).forEach(s=>{add(s.x1,s.y1);add(s.x2,s.y2);});
+  (parsed.faces||[]).forEach(f=>(f.pts||[]).forEach(p=>add(p[0],p[1])));
+  (parsed.points||[]).forEach(p=>add(p.x,p.y));
+  (parsed.texts||[]).forEach(t=>add(t.x,t.y));
+  (parsed.circles||[]).forEach(c=>{add(c.cx-c.r,c.cy-c.r);add(c.cx+c.r,c.cy+c.r);});
+  (parsed.arcs||[]).forEach(a=>{add(a.cx-a.r,a.cy-a.r);add(a.cx+a.r,a.cy+a.r);});
   if(!isFinite(minE)||!isFinite(minN))return {e:0,n:0};
   if(S.geoLock){
     S.utmE=minE; S.utmN=minN;
@@ -1901,8 +1927,15 @@ function getDXFLocalOrigin(parsed){
 }
 function getDXFBBox(parsed){
   let minE=Infinity,minN=Infinity,maxE=-Infinity,maxN=-Infinity;
-  const add=(e,n)=>{if(isFinite(e)&&isFinite(n)){minE=Math.min(minE,e);minN=Math.min(minN,n);maxE=Math.max(maxE,e);maxN=Math.max(maxN,n);}};
+  const add=(e,n)=>{
+    if(!isFinite(e)||!isFinite(n))return;
+    if(Math.abs(e)<1e-9 && Math.abs(n)<1e-9)return;
+    minE=Math.min(minE,e);minN=Math.min(minN,n);maxE=Math.max(maxE,e);maxN=Math.max(maxN,n);
+  };
   (parsed.segments||[]).forEach(s=>{add(s.x1,s.y1);add(s.x2,s.y2);});
+  (parsed.faces||[]).forEach(f=>(f.pts||[]).forEach(p=>add(p[0],p[1])));
+  (parsed.points||[]).forEach(p=>add(p.x,p.y));
+  (parsed.texts||[]).forEach(t=>add(t.x,t.y));
   (parsed.circles||[]).forEach(c=>{add(c.cx-c.r,c.cy-c.r);add(c.cx+c.r,c.cy+c.r);});
   (parsed.arcs||[]).forEach(a=>{add(a.cx-a.r,a.cy-a.r);add(a.cx+a.r,a.cy+a.r);});
   if(!isFinite(minE))return null;
@@ -2281,12 +2314,16 @@ function applyDevicePoseToCamera(force=false){
   camera.fov=S.cameraFov||72;
 
   if(posture==='horizontal'){
-    // Modo plano/mapa: teléfono acostado. Útil para caminar viendo el DXF desde arriba.
+    // Modo plano/mapa: teléfono acostado. Norte arriba y Este a la derecha.
+    // El DXF se mapea Norte = -Z; por eso la cámara superior usa up = -Z.
+    camera.up.set(0,0,-1);
     camera.position.set(0,35,0.001);
-    camera.rotation.set(-Math.PI/2,0,0);
+    camera.lookAt(0,0,0);
+    // Al usar brújula, rotamos la vista para que el plano gire como mapa de navegación.
     if(eh!=null) camera.rotation.z=THREE.MathUtils.degToRad(eh);
     controls.enabled=false;
   }else{
+    camera.up.set(0,1,0);
     // Modo AR/terreno: teléfono vertical o inclinado. Usuario en origen, cámara a altura de ojos.
     camera.position.set(0,S.eyeHeight,0);
     const beta=THREE.MathUtils.clamp(p.beta??70,-80,80);
