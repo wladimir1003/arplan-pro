@@ -1307,6 +1307,13 @@ function loadDXF(file){
   reader.readAsText(file);
 }
 
+/*
+  CONVENCIÓN DEFINITIVA DE EJES
+  - DXF X / UTM Este  -> Three X
+  - DXF Y / UTM Norte -> Three Z
+  - DXF Z / Cota      -> Three Y
+  Así el plano no queda invertido ni visto desde abajo.
+*/
 function buildDXFModel(parsed){
   if(S.model)scene.remove(S.model);
   const group=new THREE.Group();
@@ -1324,10 +1331,10 @@ function buildDXFModel(parsed){
   const addTarget=(e,n,label,type)=>{if(isFinite(e)&&isFinite(n))geoTargets.push({e,n,label,type});};
   // Mapeo correcto DXF/UTM → Three.js:
   // DXF X = Este  → Three X positivo (derecha)
-  // DXF Y = Norte → Three Z negativo, porque en vista superior la parte alta de pantalla es -Z.
+  // DXF Y = Norte → Three Z positivo.
   // DXF Z = Cota   → Three Y positivo (altura).
-  // NO invertir Este/Norte: esto evita que el plano quede espejado o al revés.
-  const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, -(y-coordOrigin.n));
+  // Este/Norte quedan directos, sin espejo y sin verlo desde abajo.
+  const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, y-coordOrigin.n);
   // Render 3DFACE entities as translucent surfaces, not only wireframe.
   const faceMatCache={};
   const faceMat=layer=>{
@@ -1350,7 +1357,7 @@ function buildDXFModel(parsed){
   });
   parsed.segments.forEach((s,idx)=>{
     addTarget(s.x1,s.y1,`LINE ${idx+1} A`,s.layer||'LINE'); addTarget(s.x2,s.y2,`LINE ${idx+1} B`,s.layer||'LINE');
-    // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=-Norte.
+    // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=Norte.
     const p1=toV(s.x1, s.y1, s.z1||0);
     const p2=toV(s.x2, s.y2, s.z2||0);
     if(p1.distanceTo(p2)<1e-10)return;
@@ -1741,8 +1748,8 @@ window.setView=function(v){
   controls.target.copy(ctr);
   if(v==='top'){
     // Vista planta con Norte arriba:
-    // como Norte del DXF está en Three -Z, el vector up de cámara debe ser -Z.
-    camera.up.set(0,0,-1);
+    // Norte del DXF está en Three +Z; el vector up de cámara debe ser +Z.
+    camera.up.set(0,0,1);
     camera.position.set(ctr.x,ctr.y+d*2,ctr.z+.001);
     camera.lookAt(ctr);
   }else{
@@ -2051,7 +2058,7 @@ function updateGeoModelFromGPS(){
 
   // Usuario = origen móvil. DXF/GLB se dibuja alrededor del usuario según coordenadas reales.
   const baseY=(!S.modelIsDXF && S.glbGeo)?(S.glbGeo.base||0):0;
-  S.model.position.set(o.e-u.e,baseY,-(o.n-u.n));
+  S.model.position.set(o.e-u.e,baseY,o.n-u.n);
 
   // Update user position marker (Waze blue dot)
   if(userMarker){
@@ -2315,8 +2322,8 @@ function applyDevicePoseToCamera(force=false){
 
   if(posture==='horizontal'){
     // Modo plano/mapa: teléfono acostado. Norte arriba y Este a la derecha.
-    // El DXF se mapea Norte = -Z; por eso la cámara superior usa up = -Z.
-    camera.up.set(0,0,-1);
+    // El DXF se mapea Norte = +Z; por eso la cámara superior usa up = +Z.
+    camera.up.set(0,0,1);
     camera.position.set(0,35,0.001);
     camera.lookAt(0,0,0);
     // Al usar brújula, rotamos la vista para que el plano gire como mapa de navegación.
@@ -2440,7 +2447,8 @@ window.centerOnUser=function(){
   const h=S.heading??0;
   controls.enabled=true;
   controls.target.set(0,0,0);
-  camera.position.set(0,30,0.001); // top-down
+  camera.up.set(0,0,1);
+  camera.position.set(0,30,0.001); // top-down, Norte arriba
   camera.zoom=1;
   camera.updateProjectionMatrix();
   controls.update();
