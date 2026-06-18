@@ -6,10 +6,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro — Navegación AR + UTM corregido</title>
+<title>ARPlan Pro — Navegación AR + UTM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
 /* ── Reset ── */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -138,22 +137,6 @@ html,body{width:100%;height:100%;overflow:hidden;
 }
 #three-canvas{position:absolute;inset:0;width:100%!important;height:100%!important;z-index:1;display:block;background:transparent!important;}
 #draw-canvas{position:absolute;inset:0;z-index:2;display:block;touch-action:none;}
-
-/* ── Mapa verificador OSM/UTM ── */
-#map-check{
-  position:absolute;inset:0;z-index:4;display:none;
-  background:#111827;
-}
-#map-check.active{display:block;}
-#map-check .leaflet-container{background:#111827;}
-.map-tools{
-  position:absolute;top:8px;left:8px;z-index:500;
-  display:flex;gap:6px;flex-wrap:wrap;pointer-events:all;
-}
-.map-tools button{
-  background:rgba(0,0,0,.72);color:#dbeafe;border:1px solid rgba(255,255,255,.18);
-  border-radius:18px;padding:6px 11px;font-size:11px;font-family:inherit;cursor:pointer;
-}
 
 /* ── HUD ── */
 #hud{position:absolute;inset:0;z-index:3;pointer-events:none;}
@@ -359,7 +342,6 @@ html,body{width:100%;height:100%;overflow:hidden;
 
   <!-- GPS & AR -->
   <button class="tb-btn" id="btn-gps" onclick="toggleGPS()" title="GPS"><i class="ti ti-current-location"></i></button>
-  <button class="tb-btn" id="btn-map" onclick="toggleMapCheck()" title="Mapa verificador OSM/UTM"><i class="ti ti-map-2"></i></button>
   <button class="tb-btn" onclick="centerOnUser()" title="Centrar en mi posición" style="color:#22c55e"><i class="ti ti-crosshair"></i></button>
   <button class="tb-btn" onclick="startARSurface()" title="AR Superficie" style="color:#6ee7b7"><i class="ti ti-augmented-reality"></i></button>
   <div class="tb-sep"></div>
@@ -400,7 +382,6 @@ html,body{width:100%;height:100%;overflow:hidden;
   <video id="cam-video" playsinline muted autoplay></video>
   <canvas id="three-canvas"></canvas>
   <canvas id="draw-canvas"></canvas>
-  <div id="map-check"><div class="map-tools"><button onclick="toggleMapCheck()">Cerrar mapa</button><button onclick="fitMapToProject()">Ver proyecto</button><button onclick="fitMapToUser()">Ver usuario</button></div><div id="leaflet-map" style="position:absolute;inset:0"></div></div>
 
   <!-- HUD -->
   <div id="hud">
@@ -529,6 +510,8 @@ html,body{width:100%;height:100%;overflow:hidden;
         <div class="grow"><span>Altitud</span><span class="gval" id="g-alt">—</span></div>
         <div class="grow"><span>Precisión</span><span class="gval" id="g-acc">—</span></div>
         <div class="grow"><span>Brújula</span><span class="gval" id="g-hdg">—</span></div>
+        <div class="grow"><span>Postura teléfono</span><span class="gval" id="g-posture">—</span></div>
+        <div class="grow"><span>Inclinación</span><span class="gval" id="g-tilt">—</span></div>
       </div>
       <button class="dz-ghost" onclick="toggleGPS()" id="gps-toggle-btn" style="width:100%;font-size:11px;padding:7px;margin-top:6px"><i class="ti ti-current-location"></i> Activar GPS</button>
       <button class="dz-ghost" onclick="setOrigin()" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-map-pin-plus"></i> Fijar origen aquí</button>
@@ -538,11 +521,23 @@ html,body{width:100%;height:100%;overflow:hidden;
       </div>
       <div style="display:flex;gap:4px;margin-top:4px">
         <input id="utm-zone" placeholder="Zona UTM ej: 19S" value="19S" style="width:74px;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
-        <input id="utm-e" placeholder="E origen DXF" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
-        <input id="utm-n" placeholder="N origen DXF" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="utm-e" placeholder="E origen proyecto" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="utm-n" placeholder="N origen proyecto" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">
+        GLB/3D: si el archivo no trae coordenadas UTM, usa estos datos para anclarlo al terreno.
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <input id="glb-e" placeholder="E origen GLB" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="glb-n" placeholder="N origen GLB" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <input id="glb-scale" placeholder="Escala" value="1" inputmode="decimal" style="width:58px;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="glb-rot" placeholder="Rot° norte" value="0" inputmode="decimal" style="width:76px;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
+        <input id="glb-base" placeholder="Altura base" value="0" inputmode="decimal" style="flex:1;height:26px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px">
       </div>
       <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);margin-top:6px">
-        <input type="checkbox" id="geo-lock"> Usar coordenadas UTM reales del DXF
+        <input type="checkbox" id="geo-lock"> Usar coordenadas UTM reales del proyecto
       </label>
       <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar GPS/UTM</button>
       <button class="dz-ghost" onclick="startFieldWalk()" style="width:100%;font-size:11px;padding:7px;background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.35);color:#6ee7b7"><i class="ti ti-route"></i> Iniciar recorrido en terreno</button>
@@ -568,6 +563,12 @@ html,body{width:100%;height:100%;overflow:hidden;
       <div style="font-size:10px;color:var(--text3);margin-top:6px">Calibración visual: ajusta hasta que el plano calce con la imagen de la cámara.</div>
       <input type="range" min="45" max="95" value="72" id="camera-fov" style="width:100%" oninput="setCameraFov(this.value)">
       <div class="grow"><span style="color:var(--text3)">FOV cámara</span><span class="gval" id="camera-fov-val">72°</span></div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);margin-top:6px">
+        <input type="checkbox" id="auto-posture" checked onchange="setAutoPosture(this.checked)"> Usar acelerómetro/giroscopio para vertical/acostado
+      </label>
+      <div style="font-size:10px;color:var(--text3);line-height:1.45">
+        Vertical = AR mirando al frente. Acostado = vista planta/mapa. Inclinado = transición con perspectiva.
+      </div>
       <div class="grow"><span style="color:var(--text3)">Filtro GPS máx.</span><input id="max-gps-acc" value="6" inputmode="decimal" onchange="setMaxGpsAccuracy(this.value)" style="width:52px;height:24px;background:#0d1117;border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;padding:0 5px"><span class="gval">m</span></div>
     </div>
   </div>
@@ -633,10 +634,10 @@ html,body{width:100%;height:100%;overflow:hidden;
   // Stub all module functions
   var FNAMES=['handleFile','triggerOpen','loadDemo','loadTestDXF',
     'zoomIn','zoomOut','zoomExtents','setView','setTool','setMode',
-    'toggleGrid','togglePanel','toggleGPS','toggleMapCheck','fitMapToProject','fitMapToUser','setOrigin','applyProjCoords',
+    'toggleGrid','togglePanel','toggleGPS','setOrigin','applyProjCoords',
     'startARSurface','startARGPS','placeAR','toggleCamera',
     'doScreenshot','undoStroke','redoStroke','saveProject',
-    'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset','setCameraFov','setMaxGpsAccuracy'];
+    'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset','setCameraFov','setMaxGpsAccuracy','setAutoPosture'];
   var Q={};
   FNAMES.forEach(function(n){
     Q[n]=[];
@@ -658,7 +659,6 @@ html,body{width:100%;height:100%;overflow:hidden;
 })();
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"}}</script>
 
 <script type="module">
@@ -685,7 +685,9 @@ const S={
   projLat:null, projLon:null,
   utmZone:'19S', utmE:null, utmN:null, geoLock:false, gpsNavActive:false, eyeHeight:1.65, lastDXFText:null, modelIsDXF:false, gridMode:0,
   calibDE:parseFloat(localStorage.getItem('arplan_calib_de')||'0')||0, calibDN:parseFloat(localStorage.getItem('arplan_calib_dn')||'0')||0,
-  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, cameraFov:parseFloat(localStorage.getItem('arplan_camera_fov')||'72')||72, maxGpsAccuracy:parseFloat(localStorage.getItem('arplan_max_gps_acc')||'6')||6, gpsFilterAlpha:0.35, lastUserUTM:null, filteredUserUTM:null, gpsTrail:[], map:null, mapUserMarker:null, mapProjectLayer:null, mapActive:false, firstPersonGPS:false,
+  headingOffset:parseFloat(localStorage.getItem('arplan_heading_offset')||'0')||0, cameraFov:parseFloat(localStorage.getItem('arplan_camera_fov')||'72')||72, maxGpsAccuracy:parseFloat(localStorage.getItem('arplan_max_gps_acc')||'6')||6, gpsFilterAlpha:0.35, lastUserUTM:null, filteredUserUTM:null, gpsTrail:[],
+  autoPosture:localStorage.getItem('arplan_auto_posture')!=='0', devicePose:{alpha:null,beta:null,gamma:null,posture:'unknown',pitch:0,roll:0},
+  glbGeo:{e:null,n:null,scale:1,rot:0,base:0},
   model:null, arSession:null, hitSrc:null, modelPlaced:false,
   mode:'3d', zf:1, mPts:[], camStream:null,
   modelBlobURL:null,
@@ -875,13 +877,7 @@ window.placeAR=function(){
 function updateCameraOverlayMode(){
   const video=document.getElementById('cam-video');
   if(S.camStream){
-    // Camera ON: video behind, canvas transparent.
-    // El mapa verificador debe apagarse, si no queda encima de la cámara.
-    if(S.mapActive){
-      S.mapActive=false;
-      document.getElementById('map-check')?.classList.remove('active');
-      document.getElementById('btn-map')?.classList.remove('active');
-    }
+    // Camera ON: video behind, canvas transparent
     video.style.display='block';
     c3.style.background='transparent';
     c3.style.cssText+='background:transparent!important;';
@@ -969,13 +965,6 @@ window.toggleCamera=async function(){
       <p>• En iOS Safari: Ajustes → Safari → Cámara → Permitir</p>
       <div class="modal-btns"><button class="btn-pri" onclick="closeModal()">Entendido</button></div>`);
     return;
-  }
-
-  // Si el mapa OSM estaba abierto, cerrarlo antes de mostrar la cámara.
-  if(S.mapActive){
-    S.mapActive=false;
-    document.getElementById('map-check')?.classList.remove('active');
-    document.getElementById('btn-map')?.classList.remove('active');
   }
 
   S.camStream=stream;
@@ -1226,71 +1215,28 @@ function loadGLTF(file){
   gltfLoader.load(url,gltf=>{
     setProgress(80);if(S.model)scene.remove(S.model);
     S.model=gltf.scene; S.modelIsDXF=false;
+    S.model.userData.isGLB=true;
+    S.model.userData.rawBBox=new THREE.Box3().setFromObject(S.model);
+    S.model.userData.rawScale=S.model.scale.clone();
+    S.model.userData.rawPosition=S.model.position.clone();
+    S.model.userData.rawRotation=S.model.rotation.clone();
 
-    // GLB/GLTF puede venir como modelo local del elemento. Si el modo UTM está activo,
-    // NO lo normalizamos ni lo centramos: se mantiene en metros y se le asigna un origen UTM.
-    const geoMode=!!document.getElementById('geo-lock')?.checked;
-    if(geoMode){
-      S.geoLock=true;
-      S.zf=1;
-      S.model.scale.setScalar(1);
-      S.model.position.set(0,0,0);
-      applyGLBGeoOriginFromInputs(S.model);
+    // Vista normal: se normaliza para que el usuario pueda revisar el modelo.
+    // Modo terreno: se reescala con los controles GLB y se ancla a UTM.
+    if(S.geoLock){
+      applyGLBGeoTransform(true);
     }else{
       normObj(S.model,20);
     }
-
     scene.add(S.model);
     URL.revokeObjectURL(url);setProgress(0);
-    if(S.geoLock){
-      setupGPSNavigationCamera();
-      updateGeoModelFromGPS();
-    }else{
-      zoomExtents();
-    }
+    if(S.geoLock){setupGPSNavigationCamera();updateGeoModelFromGPS();}else zoomExtents();
     updateCameraOverlayMode();
-    console.log('[GLB/GLTF] cargado',{file:file.name, bbox:new THREE.Box3().setFromObject(S.model), geoOrigin:S.model.userData.geoOrigin});
-    showToast(S.geoLock?'GLB cargado con origen UTM':'Modelo: '+file.name,'ok');
-    updateLayers([{name:'MODELO',color:'#3b82f6',visible:true}]);
+    console.log('[GLB/GLTF] cargado',{file:file.name, bbox:new THREE.Box3().setFromObject(S.model)});
+    showToast('Modelo 3D cargado: '+file.name,'ok');
+    updateLayers([{name:'MODELO_GLB',color:'#3b82f6',visible:true}]);
   },p=>{if(p.total)setProgress(30+(p.loaded/p.total)*50);},
   err=>{showToast('Error al cargar GLB','err');console.error(err);setProgress(0);});
-}
-
-function applyGLBGeoOriginFromInputs(obj){
-  if(!obj)return;
-  const ze=document.getElementById('utm-zone')?.value||S.utmZone||'19S';
-  const e=parseFloat(document.getElementById('utm-e')?.value);
-  const n=parseFloat(document.getElementById('utm-n')?.value);
-  S.utmZone=parseUTMZone(ze).label;
-  if(isFinite(e))S.utmE=e;
-  if(isFinite(n))S.utmN=n;
-  if(isFinite(S.utmE)&&isFinite(S.utmN)){
-    obj.userData.geoOrigin={e:S.utmE,n:S.utmN,zone:S.utmZone};
-  }else if(S.gpsPos){
-    const u=correctedUserUTM();
-    if(u){
-      obj.userData.geoOrigin={e:u.e,n:u.n,zone:u.zone};
-      S.utmE=u.e;S.utmN=u.n;S.utmZone=u.zone;
-      const ei=document.getElementById('utm-e'),ni=document.getElementById('utm-n'),zi=document.getElementById('utm-zone');
-      if(ei)ei.value=u.e.toFixed(3); if(ni)ni.value=u.n.toFixed(3); if(zi)zi.value=u.zone;
-    }
-  }else{
-    showToast('GLB en UTM requiere E/N del elemento o GPS activo','err');
-  }
-  const b=new THREE.Box3().setFromObject(obj);
-  const c=b.getCenter(new THREE.Vector3());
-  const sz=b.getSize(new THREE.Vector3());
-  if(obj.userData.geoOrigin){
-    obj.userData.geoBBox={
-      minE:obj.userData.geoOrigin.e + b.min.x,
-      maxE:obj.userData.geoOrigin.e + b.max.x,
-      minN:obj.userData.geoOrigin.n - b.max.z,
-      maxN:obj.userData.geoOrigin.n - b.min.z,
-      centerE:obj.userData.geoOrigin.e + c.x,
-      centerN:obj.userData.geoOrigin.n - c.z,
-    };
-    obj.userData.geoTargets=[{e:obj.userData.geoBBox.centerE,n:obj.userData.geoBBox.centerN,label:'GLB centro',type:'GLB'}];
-  }
 }
 
 function normObj(obj,sz){
@@ -1745,6 +1691,11 @@ window.toggleGrid=function(){
   if(document.getElementById('heading-offset')){document.getElementById('heading-offset').value=String(S.headingOffset||0);document.getElementById('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;}
 if(document.getElementById('camera-fov')){document.getElementById('camera-fov').value=String(S.cameraFov||72);document.getElementById('camera-fov-val').textContent=`${Math.round(S.cameraFov||72)}°`;camera.fov=S.cameraFov||72;camera.updateProjectionMatrix();}
 if(document.getElementById('max-gps-acc'))document.getElementById('max-gps-acc').value=String(S.maxGpsAccuracy||6);
+if(document.getElementById('auto-posture'))document.getElementById('auto-posture').checked=!!S.autoPosture;
+if(document.getElementById('auto-posture'))document.getElementById('auto-posture').checked=!!S.autoPosture;
+if(document.getElementById('glb-scale'))document.getElementById('glb-scale').value=String(S.glbGeo.scale||1);
+if(document.getElementById('glb-rot'))document.getElementById('glb-rot').value=String(S.glbGeo.rot||0);
+if(document.getElementById('glb-base'))document.getElementById('glb-base').value=String(S.glbGeo.base||0);
 updateNavPanel(null,null);
 applyGridMode();
   showToast(['Grilla completa','Grilla tenue','Grilla oculta'][S.gridMode]);
@@ -1849,21 +1800,9 @@ window.toggleLayer=function(name){const l=S.layers.find(x=>x.name===name);if(l){
 
 /* ── UTM/GPS georreferenciado ── */
 function parseUTMZone(z){
-  // En Chile normalmente el usuario escribe "19S" queriendo decir ZONA 19 HEMISFERIO SUR.
-  // Ojo: en la nomenclatura oficial MGRS la letra S es banda norte, pero para terreno/UTM
-  // lo más común en DXF/GPS es usar N/S como hemisferio. Por eso aquí 19S = Sur.
-  const raw=String(z||'19S').trim().toUpperCase().replace(/\s+/g,'');
-  const m=raw.match(/^(\d{1,2})([A-Z]*)$/);
+  const m=String(z||'19S').trim().toUpperCase().match(/^(\d{1,2})([C-X])?$/);
   const zone=m?Math.max(1,Math.min(60,parseInt(m[1],10))):19;
-  const suf=(m&&m[2])?m[2]:'';
-  let hem='S';
-  if(suf==='N'||suf==='NORTE'||suf==='NORTH') hem='N';
-  else if(suf==='S'||suf==='SUR'||suf==='SOUTH'||suf==='') hem='S';
-  else {
-    // Si alguien usa banda UTM real: C-M = Sur, N-X = Norte.
-    const band=suf[0];
-    hem=(band>='N')?'N':'S';
-  }
+  const hem=(m&&m[2]&&m[2]>='N')?'N':'S';
   return {zone,hem,label:String(zone)+hem};
 }
 function latLonToUTM(lat,lon,zoneOverride){
@@ -1887,88 +1826,6 @@ function latLonToUTM(lat,lon,zoneOverride){
   if(lat<0)North+=10000000;
   return {e:E,n:North,zone:z.label};
 }
-
-function utmToLatLon(E,N,zoneOverride){
-  const z=parseUTMZone(zoneOverride||S.utmZone);
-  const a=6378137.0, f=1/298.257223563, k0=0.9996;
-  const e=Math.sqrt(f*(2-f));
-  const e1=(1-Math.sqrt(1-e*e))/(1+Math.sqrt(1-e*e));
-  const x=E-500000;
-  let y=N; if(z.hem==='S') y-=10000000;
-  const lon0=((z.zone-1)*6-180+3);
-  const M=y/k0;
-  const mu=M/(a*(1-e*e/4-3*Math.pow(e,4)/64-5*Math.pow(e,6)/256));
-  const phi1=mu+(3*e1/2-27*Math.pow(e1,3)/32)*Math.sin(2*mu)
-    +(21*e1*e1/16-55*Math.pow(e1,4)/32)*Math.sin(4*mu)
-    +(151*Math.pow(e1,3)/96)*Math.sin(6*mu)
-    +(1097*Math.pow(e1,4)/512)*Math.sin(8*mu);
-  const ep2=e*e/(1-e*e);
-  const C1=ep2*Math.cos(phi1)**2;
-  const T1=Math.tan(phi1)**2;
-  const N1=a/Math.sqrt(1-e*e*Math.sin(phi1)**2);
-  const R1=a*(1-e*e)/Math.pow(1-e*e*Math.sin(phi1)**2,1.5);
-  const D=x/(N1*k0);
-  const lat=phi1-(N1*Math.tan(phi1)/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*Math.pow(D,4)/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*Math.pow(D,6)/720);
-  const lon=(D-(1+2*T1+C1)*Math.pow(D,3)/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*Math.pow(D,5)/120)/Math.cos(phi1);
-  return {lat:THREE.MathUtils.radToDeg(lat), lon:lon0+THREE.MathUtils.radToDeg(lon)};
-}
-function ensureMap(){
-  if(S.map || !window.L)return S.map;
-  S.map=L.map('leaflet-map',{zoomControl:true,attributionControl:true});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:22, attribution:'&copy; OpenStreetMap'
-  }).addTo(S.map);
-  // No enviar el mapa a coordenadas inventadas. Primero intentar usuario/proyecto; si no hay GPS aún, Santiago como vista neutra.
-  const u=S.lastUserUTM||correctedUserUTM();
-  const b=projectLatLngBounds?.();
-  if(u){const ll=utmToLatLon(u.e,u.n,u.zone); S.map.setView([ll.lat,ll.lon],19);}
-  else if(b) S.map.fitBounds(b,{padding:[40,40],maxZoom:21});
-  else S.map.setView([-33.45,-70.66],17);
-  setTimeout(()=>S.map.invalidateSize(),80);
-  return S.map;
-}
-function projectLatLngBounds(){
-  const b=S.model?.userData?.geoBBox; if(!b)return null;
-  const p1=utmToLatLon(b.minE,b.minN,S.utmZone);
-  const p2=utmToLatLon(b.maxE,b.maxN,S.utmZone);
-  return [[Math.min(p1.lat,p2.lat),Math.min(p1.lon,p2.lon)],[Math.max(p1.lat,p2.lat),Math.max(p1.lon,p2.lon)]];
-}
-function updateMapOverlay(){
-  if(!S.map)return;
-  const u=S.lastUserUTM||correctedUserUTM();
-  if(u){
-    const ll=utmToLatLon(u.e,u.n,u.zone);
-    if(!S.mapUserMarker)S.mapUserMarker=L.circleMarker([ll.lat,ll.lon],{radius:8,weight:2,fillOpacity:.8}).addTo(S.map).bindPopup('Tu posición GPS corregida');
-    else S.mapUserMarker.setLatLng([ll.lat,ll.lon]);
-  }
-  const bounds=projectLatLngBounds();
-  if(bounds){
-    if(S.mapProjectLayer)S.mapProjectLayer.remove();
-    S.mapProjectLayer=L.rectangle(bounds,{weight:2,fillOpacity:.08}).addTo(S.map).bindPopup('Extensión del DXF/Proyecto');
-  }
-}
-window.toggleMapCheck=function(){
-  const el=document.getElementById('map-check');
-  S.mapActive=!S.mapActive;
-  el?.classList.toggle('active',S.mapActive);
-  document.getElementById('btn-map')?.classList.toggle('active',S.mapActive);
-  if(S.mapActive){
-    ensureMap(); updateMapOverlay(); setTimeout(()=>{S.map?.invalidateSize(); window.fitMapToProject();},120);
-    showToast('Mapa verificador OSM/UTM activo','ok');
-  }
-};
-window.fitMapToProject=function(){
-  if(!ensureMap())return; updateMapOverlay();
-  const b=projectLatLngBounds();
-  if(b)S.map.fitBounds(b,{padding:[40,40],maxZoom:21});
-  else window.fitMapToUser();
-};
-window.fitMapToUser=function(){
-  if(!ensureMap())return; updateMapOverlay();
-  const u=S.lastUserUTM||correctedUserUTM();
-  if(u){const ll=utmToLatLon(u.e,u.n,u.zone);S.map.setView([ll.lat,ll.lon],20);}
-};
-
 function getDXFLocalOrigin(parsed){
   if(S.geoLock && isFinite(S.utmE) && isFinite(S.utmN)) return {e:S.utmE,n:S.utmN};
   let minE=Infinity,minN=Infinity;
@@ -2046,7 +1903,7 @@ function updateNavPanel(u,near){
   }
   // Update user position label
   const ulbl=q('user-label-pill');
-  if(ulbl&&u&&S.gpsActive&&!(S.firstPersonGPS&&S.camStream)){
+  if(ulbl&&u&&S.gpsActive){
     ulbl.id='user-label-pill';
     ulbl.classList.add('active');
     const acc=Math.round(S.gpsPos?.accuracy||0);
@@ -2072,21 +1929,16 @@ function effectiveHeading(){
 function setupGPSNavigationCamera(){
   if(!S.geoLock)return;
   S.gpsNavActive=true;
-  S.firstPersonGPS=true;
   controls.enabled=false;
   camera.zoom=1;
   camera.fov=S.cameraFov||72;
   camera.near=.02;
   camera.far=5000;
-
-  // Modo primera persona: el celular/tablet es el visor 3D.
-  // X = Este/Oeste, Y = altura, Z = profundidad Norte/Sur.
-  // El usuario queda dentro del dibujo en (0, altura de ojos, 0).
-  camera.position.set(0,S.eyeHeight||1.65,0);
   camera.rotation.order='YXZ';
-  const eh=effectiveHeading();
-  if(eh!=null)camera.rotation.set(0,-THREE.MathUtils.degToRad(eh),0);
-  else camera.rotation.set(0,0,0);
+
+  // La cámara cambia según la postura física del teléfono:
+  // vertical = AR a altura de ojos; acostado = vista mapa/planta; inclinado = transición.
+  applyDevicePoseToCamera(true);
   camera.updateProjectionMatrix();
 }
 function horizontalDistanceToGeoBBox(u,b){
@@ -2106,8 +1958,8 @@ function updateGeoModelFromGPS(){
   const o=S.model.userData.geoOrigin;
 
   // Usuario = origen móvil. DXF/GLB se dibuja alrededor del usuario según coordenadas reales.
-  // En Three.js la cámara mira hacia -Z; por eso Norte se representa como -Z.
-  S.model.position.set(o.e-u.e,0,-(o.n-u.n));
+  const baseY=(!S.modelIsDXF && S.glbGeo)?(S.glbGeo.base||0):0;
+  S.model.position.set(o.e-u.e,baseY,-(o.n-u.n));
 
   // Update user position marker (Waze blue dot)
   if(userMarker){
@@ -2122,16 +1974,12 @@ function updateGeoModelFromGPS(){
       const accScaled=S.geoLock?accM:accM*(S.zf||1);
       userMarker.setAccuracyRadius(Math.min(accScaled,50));
     }
-    // En cámara/primera persona el marcador azul estaría encima del visor;
-    // se oculta porque el usuario ES la cámara.
-    if(S.firstPersonGPS&&S.camStream) userMarker.hide();
-    else userMarker.show();
+    userMarker.show();
   }
 
   if(S.gpsNavActive){
     setupGPSNavigationCamera();
-    const eh=effectiveHeading();
-    if(eh!=null) camera.rotation.set(0,-THREE.MathUtils.degToRad(eh),0);
+    applyDevicePoseToCamera(false);
   }
 
   const near=nearestGeoTarget(u);
@@ -2144,16 +1992,47 @@ function updateGeoModelFromGPS(){
   const quality=acc<=5?'buena':acc<=12?'media':'baja';
 
   updateNavPanel(u,near);
-  updateMapOverlay();
   document.getElementById('xyz-pill').textContent=`RECORRIDO ${u.zone} | GPS ${quality} ±${acc} m | ${near?near.label:'DXF'} ${dist.toFixed(1)} m | rumbo ${brg.toFixed(0)}°`;
   if(S.debug) console.log('[FIELD NAV]',{gps:{lat:S.gpsPos.latitude,lon:S.gpsPos.longitude,accuracy:S.gpsPos.accuracy},utm:u,origin:o,nearest:near,bbox,dist,bearing:brg,modelPosition:S.model.position,heading:S.heading,headingOffset:S.headingOffset,effectiveHeading:effectiveHeading()});
+}
+function readGLBGeoInputs(){
+  const ge=parseFloat(document.getElementById('glb-e')?.value);
+  const gn=parseFloat(document.getElementById('glb-n')?.value);
+  const gs=parseFloat(document.getElementById('glb-scale')?.value);
+  const gr=parseFloat(document.getElementById('glb-rot')?.value);
+  const gb=parseFloat(document.getElementById('glb-base')?.value);
+  const e=isFinite(ge)?ge:(isFinite(S.utmE)?S.utmE:null);
+  const n=isFinite(gn)?gn:(isFinite(S.utmN)?S.utmN:null);
+  S.glbGeo={e,n,scale:isFinite(gs)&&gs>0?gs:1,rot:isFinite(gr)?gr:0,base:isFinite(gb)?gb:0};
+  if(isFinite(e)&&!document.getElementById('glb-e')?.value) document.getElementById('glb-e').value=e.toFixed(3);
+  if(isFinite(n)&&!document.getElementById('glb-n')?.value) document.getElementById('glb-n').value=n.toFixed(3);
+  return S.glbGeo;
+}
+function applyGLBGeoTransform(silent=false){
+  if(!S.model || S.modelIsDXF)return false;
+  const g=readGLBGeoInputs();
+  if(!isFinite(g.e)||!isFinite(g.n)){
+    if(!silent)showToast('Para GLB debes ingresar E/N de origen o fijar origen con GPS','err');
+    return false;
+  }
+
+  // Se asume que el GLB está modelado en metros locales: X=Este, Y=Altura, Z=Norte.
+  // En la escena usamos Z negativo para Norte, por eso el movimiento geográfico se corrige en updateGeoModelFromGPS().
+  S.model.userData.geoOrigin={e:g.e,n:g.n,zone:S.utmZone,type:'GLB'};
+  S.model.userData.geoBBox=null;
+  S.model.userData.geoTargets=[{e:g.e,n:g.n,label:'Origen GLB',type:'GLB'}];
+  S.model.scale.setScalar(g.scale);
+  S.model.rotation.set(0,-THREE.MathUtils.degToRad(g.rot),0);
+  S.model.position.set(0,g.base,0);
+  S.zf=g.scale;
+  return true;
 }
 function rebuildDXFForGeoMode(){
   if(S.modelIsDXF&&S.lastDXFText){
     try{buildDXFModel(parseDXF(S.lastDXFText));}
     catch(e){console.error(e);showToast('No se pudo reconstruir DXF UTM','err');}
   }else if(S.model){
-    applyGLBGeoOriginFromInputs(S.model);
+    applyGLBGeoTransform(false);
   }
 }
 
@@ -2199,11 +2078,8 @@ window.toggleGPS=function(){
   };
   const err=e=>{
     const msgs={1:'Permiso GPS denegado.',2:'Sin señal GPS.',3:'Timeout GPS.'};
-    const secure=(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1');
-    const extra=secure?'':' Usa HTTPS o localhost; el GPS no funciona desde archivo local/http.';
-    showToast((msgs[e.code]||'Error GPS')+extra,'err');
+    showToast(msgs[e.code]||'Error GPS','err');
     document.getElementById('gdot').className='gps-dot';
-    document.getElementById('gps-txt').textContent='GPS error';
   };
   navigator.geolocation.getCurrentPosition(ok,err,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
   S.gpsWatch=navigator.geolocation.watchPosition(ok,err,{enableHighAccuracy:true,maximumAge:3000,timeout:20000});
@@ -2218,6 +2094,9 @@ window.setOrigin=function(){
   document.getElementById('utm-zone').value=u.zone;
   document.getElementById('utm-e').value=u.e.toFixed(3);
   document.getElementById('utm-n').value=u.n.toFixed(3);
+  const ge=document.getElementById('glb-e'), gn=document.getElementById('glb-n');
+  if(ge && !ge.value) ge.value=u.e.toFixed(3);
+  if(gn && !gn.value) gn.value=u.n.toFixed(3);
   S.utmZone=u.zone; S.utmE=u.e; S.utmN=u.n;
   showToast('Origen GPS/UTM fijado','ok');
 };
@@ -2231,7 +2110,8 @@ window.applyProjCoords=function(){
   S.utmE=isFinite(e)?e:null; S.utmN=isFinite(n)?n:null;
   S.geoLock=!!document.getElementById('geo-lock')?.checked;
   if(!isNaN(lat)&&!isNaN(lon)){S.projLat=lat;S.projLon=lon;}
-  if(S.geoLock && (!isFinite(S.utmE)||!isFinite(S.utmN))){showToast('UTM activo: si dejas E/N vacío usaré el mínimo del DXF','ok');}
+  if(!S.modelIsDXF) readGLBGeoInputs();
+  if(S.geoLock && (!isFinite(S.utmE)||!isFinite(S.utmN)) && S.modelIsDXF){showToast('UTM activo: si dejas E/N vacío usaré el mínimo del DXF','ok');}
   rebuildDXFForGeoMode();
   if(S.geoLock){
     S.gpsNavActive=true;
@@ -2244,7 +2124,7 @@ window.applyProjCoords=function(){
 window.startFieldWalk=function(){
   if(!S.model){showToast('Carga primero el DXF o GLB','err');return;}
   document.getElementById('geo-lock').checked=true;
-  S.geoLock=true; S.gpsNavActive=true; S.firstPersonGPS=true;
+  S.geoLock=true; S.gpsNavActive=true;
   if(!S.gpsActive)toggleGPS();
   if(!S.camStream && IS_MOBILE)toggleCamera().catch(()=>{});
   applyProjCoords();
@@ -2291,25 +2171,113 @@ window.setMaxGpsAccuracy=function(v){
   showToast(`Filtro GPS: ±${S.maxGpsAccuracy} m`,'ok');
 };
 
-// Compass
+
+function classifyPosture(beta,gamma){
+  const ab=Math.abs(beta??0), ag=Math.abs(gamma??0);
+  // beta ≈ 0 con pantalla mirando arriba/abajo => teléfono acostado.
+  // beta alto (45-135) => teléfono parado/vertical.
+  if(ab<28 && ag<45) return 'horizontal';
+  if(ab>55 || ag>55) return 'vertical';
+  return 'inclinado';
+}
+function updateDevicePoseUI(){
+  const p=S.devicePose||{};
+  const lbl=p.posture==='horizontal'?'Acostado / mapa':p.posture==='vertical'?'Vertical / AR':p.posture==='inclinado'?'Inclinado':'—';
+  const gp=document.getElementById('g-posture'); if(gp)gp.textContent=lbl;
+  const gt=document.getElementById('g-tilt'); if(gt)gt.textContent=(p.beta==null?'—':`β ${Math.round(p.beta)}° / γ ${Math.round(p.gamma||0)}°`);
+  const pill=document.getElementById('xyz-pill');
+  if(pill && S.gpsNavActive && p.posture){
+    // No sobreescribe permanentemente: updateGeoModelFromGPS volverá a poner distancia/rumbo.
+    pill.dataset.posture=lbl;
+  }
+}
+function applyDevicePoseToCamera(force=false){
+  if(!S.gpsNavActive||!S.geoLock)return;
+  const eh=effectiveHeading();
+  const p=S.devicePose||{};
+  const posture=(S.autoPosture?p.posture:'vertical')||'vertical';
+
+  camera.rotation.order='YXZ';
+  camera.zoom=1;
+  camera.fov=S.cameraFov||72;
+
+  if(posture==='horizontal'){
+    // Modo plano/mapa: teléfono acostado. Útil para caminar viendo el DXF desde arriba.
+    camera.position.set(0,35,0.001);
+    camera.rotation.set(-Math.PI/2,0,0);
+    if(eh!=null) camera.rotation.z=THREE.MathUtils.degToRad(eh);
+    controls.enabled=false;
+  }else{
+    // Modo AR/terreno: teléfono vertical o inclinado. Usuario en origen, cámara a altura de ojos.
+    camera.position.set(0,S.eyeHeight,0);
+    const beta=THREE.MathUtils.clamp(p.beta??70,-80,80);
+    const gamma=THREE.MathUtils.clamp(p.gamma??0,-45,45);
+    const pitch=posture==='inclinado'
+      ? THREE.MathUtils.degToRad(THREE.MathUtils.clamp(beta-70,-35,25))
+      : THREE.MathUtils.degToRad(0);
+    const roll=THREE.MathUtils.degToRad(gamma*0.25);
+    camera.rotation.x=pitch;
+    camera.rotation.y=eh!=null?-THREE.MathUtils.degToRad(eh):0;
+    camera.rotation.z=roll;
+    controls.enabled=false;
+  }
+  camera.updateProjectionMatrix();
+}
+window.setAutoPosture=function(v){
+  S.autoPosture=!!v;
+  localStorage.setItem('arplan_auto_posture',S.autoPosture?'1':'0');
+  updateDevicePoseUI();
+  applyDevicePoseToCamera(true);
+  showToast(S.autoPosture?'Postura automática activada':'Postura automática desactivada');
+};
+
+// Compass + acelerómetro/giroscopio
 (()=>{
   const h=e=>{
+    // iOS usa webkitCompassHeading; Android suele entregar alpha/beta/gamma.
     let v=e.webkitCompassHeading!=null?e.webkitCompassHeading:e.alpha!=null?(360-e.alpha)%360:null;
-    if(v===null)return;
-    S.heading=Math.round(v);
-    if(S.gpsNavActive) updateGeoModelFromGPS();
-    document.getElementById('hdg-txt').textContent=`N ${S.heading}°`;
-    document.getElementById('g-hdg').textContent=S.heading+'°';
+    if(v!==null && isFinite(v)){
+      S.heading=Math.round(v);
+      document.getElementById('hdg-txt').textContent=`N ${S.heading}°`;
+      document.getElementById('g-hdg').textContent=S.heading+'°';
+    }
+
+    if(e.beta!=null || e.gamma!=null){
+      S.devicePose={
+        alpha:e.alpha??S.devicePose.alpha,
+        beta:e.beta??S.devicePose.beta,
+        gamma:e.gamma??S.devicePose.gamma,
+        posture:classifyPosture(e.beta??S.devicePose.beta??0,e.gamma??S.devicePose.gamma??0),
+        pitch:e.beta??S.devicePose.pitch,
+        roll:e.gamma??S.devicePose.roll
+      };
+      updateDevicePoseUI();
+    }
+
+    if(S.gpsNavActive){
+      applyDevicePoseToCamera(false);
+      updateGeoModelFromGPS();
+    }
   };
+
+  function attachOrientation(){
+    window.addEventListener('deviceorientationabsolute',h,true);
+    window.addEventListener('deviceorientation',h,true);
+  }
+
   if(typeof DeviceOrientationEvent!=='undefined'){
     if(typeof DeviceOrientationEvent.requestPermission==='function'){
-      document.getElementById('gps-toggle-btn').addEventListener('pointerdown',function rp(){
-        DeviceOrientationEvent.requestPermission().then(p=>{if(p==='granted'){window.addEventListener('deviceorientationabsolute',h,true);window.addEventListener('deviceorientation',h,true);}}).catch(()=>{window.addEventListener('deviceorientation',h,true);});
-        this.removeEventListener('pointerdown',rp);
-      },{once:false});
+      const btn=document.getElementById('gps-toggle-btn');
+      const ask=()=>{
+        DeviceOrientationEvent.requestPermission()
+          .then(p=>{if(p==='granted')attachOrientation();})
+          .catch(()=>attachOrientation());
+      };
+      if(btn)btn.addEventListener('pointerdown',ask,{once:true});
+      document.getElementById('btn-gps')?.addEventListener('pointerdown',ask,{once:true});
+      document.getElementById('btn-camera')?.addEventListener('pointerdown',ask,{once:true});
     } else {
-      window.addEventListener('deviceorientationabsolute',h,true);
-      window.addEventListener('deviceorientation',h,true);
+      attachOrientation();
     }
   }
 })();
@@ -2376,8 +2344,6 @@ window.startARGPS=function(){
     applyProjCoords();
   }
   S.gpsNavActive=true;
-  S.firstPersonGPS=true;
-  if(S.model&&!S.modelIsDXF)applyGLBGeoOriginFromInputs(S.model);
   setupGPSNavigationCamera();
   updateCameraOverlayMode();
   updateGeoModelFromGPS();
@@ -2463,6 +2429,9 @@ resizeAll();
 if(document.getElementById('heading-offset')){document.getElementById('heading-offset').value=String(S.headingOffset||0);document.getElementById('heading-offset-val').textContent=`${Math.round(S.headingOffset||0)}°`;}
 if(document.getElementById('camera-fov')){document.getElementById('camera-fov').value=String(S.cameraFov||72);document.getElementById('camera-fov-val').textContent=`${Math.round(S.cameraFov||72)}°`;camera.fov=S.cameraFov||72;camera.updateProjectionMatrix();}
 if(document.getElementById('max-gps-acc'))document.getElementById('max-gps-acc').value=String(S.maxGpsAccuracy||6);
+if(document.getElementById('glb-scale'))document.getElementById('glb-scale').value=String(S.glbGeo.scale||1);
+if(document.getElementById('glb-rot'))document.getElementById('glb-rot').value=String(S.glbGeo.rot||0);
+if(document.getElementById('glb-base'))document.getElementById('glb-base').value=String(S.glbGeo.base||0);
 updateNavPanel(null,null);
 applyGridMode();
 setView('iso');
