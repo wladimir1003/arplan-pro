@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>ARPlan Pro — Navegación AR + UTM</title>
+<title>ARPlan Pro — AR GPS/UTM corregido</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/dist/tabler-icons.min.css">
 <style>
@@ -541,6 +541,8 @@ html,body{width:100%;height:100%;overflow:hidden;
       </label>
       <button class="dz-ghost" onclick="applyProjCoords()" style="width:100%;font-size:11px;padding:7px">Aplicar GPS/UTM</button>
       <button class="dz-ghost" onclick="startFieldWalk()" style="width:100%;font-size:11px;padding:7px;background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.35);color:#6ee7b7"><i class="ti ti-route"></i> Iniciar recorrido en terreno</button>
+      <button class="dz-ghost" onclick="toggleUserMarker()" id="user-marker-btn" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-point"></i> Ocultar punto usuario</button>
+      <button class="dz-ghost" onclick="toggleAccuracyRing()" id="accuracy-ring-btn" style="width:100%;font-size:11px;padding:7px"><i class="ti ti-circle"></i> Mostrar aro precisión GPS</button>
       <div class="gcard" style="margin-top:6px">
         <div class="grow"><span>UTM usuario</span><span class="gval" id="nav-utm">—</span></div>
         <div class="grow"><span>Objeto cercano</span><span class="gval" id="nav-near">—</span></div>
@@ -635,7 +637,7 @@ html,body{width:100%;height:100%;overflow:hidden;
   var FNAMES=['handleFile','triggerOpen','loadDemo','loadTestDXF',
     'zoomIn','zoomOut','zoomExtents','setView','setTool','setMode',
     'toggleGrid','togglePanel','toggleGPS','setOrigin','applyProjCoords',
-    'startARSurface','startARGPS','placeAR','toggleCamera',
+    'startARSurface','startARGPS','placeAR','toggleCamera','toggleUserMarker','toggleAccuracyRing',
     'doScreenshot','undoStroke','redoStroke','saveProject',
     'addObservation','exportObsPDF','toggleLayer','startFieldWalk','calibrateHere','clearCalibration','setHeadingOffset','setCameraFov','setMaxGpsAccuracy','setAutoPosture'];
   var Q={};
@@ -750,8 +752,9 @@ const userMarker=(()=>{
   // Accuracy circle (will be scaled by GPS accuracy in meters)
   const accRing=new THREE.Mesh(
     new THREE.RingGeometry(0.9,0.95,48).rotateX(-Math.PI/2),
-    new THREE.MeshBasicMaterial({color:0x22c55e,transparent:true,opacity:0.4,side:THREE.DoubleSide,depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0x22c55e,transparent:true,opacity:0.12,side:THREE.DoubleSide,depthWrite:false}));
   accRing.name='accRing';
+  accRing.visible=false; // Evita el gran círculo azul/verde que tapaba la pantalla
   g.add(accRing);
 
   // Direction arrow — cone pointing in heading direction
@@ -770,6 +773,7 @@ const userMarker=(()=>{
   g.add(dot);
 
   g.visible=false;
+  g.scale.setScalar(0.65); // marcador pequeño: no debe tapar la pantalla
   g.renderOrder=999; // always on top of model
   scene.add(g);
 
@@ -783,8 +787,12 @@ const userMarker=(()=>{
       this.glow.scale.setScalar(0.9+0.15*pulse);
     },
     setAccuracyRadius(r){
-      // r in scene units (already scaled by S.zf)
-      const s=Math.max(r,0.5);
+      // El aro de precisión GPS puede ser muy grande (5–50 m) y tapar toda la pantalla.
+      // Por defecto queda oculto; si se activa, se limita visualmente para no molestar.
+      const show=!!S.showAccuracyRing;
+      this.accRing.visible=show;
+      if(!show)return;
+      const s=THREE.MathUtils.clamp(r,0.8,6);
       this.accRing.scale.setScalar(s);
     },
     setHeading(deg){
@@ -796,7 +804,7 @@ const userMarker=(()=>{
     setPosition(x,y,z){
       this.group.position.set(x,y+0.02,z);
     },
-    show(){ this.group.visible=true; },
+    show(){ this.group.visible=!!S.showUserMarker; },
     hide(){ this.group.visible=false; },
   };
 })();
@@ -1972,7 +1980,7 @@ function updateGeoModelFromGPS(){
     if(S.gpsPos){
       const accM=S.gpsPos.accuracy||10;
       const accScaled=S.geoLock?accM:accM*(S.zf||1);
-      userMarker.setAccuracyRadius(Math.min(accScaled,50));
+      userMarker.setAccuracyRadius(accScaled);
     }
     userMarker.show();
   }
@@ -2119,6 +2127,26 @@ window.applyProjCoords=function(){
   }
   updateGeoModelFromGPS();
   showToast(S.geoLock?'GPS/UTM real aplicado: camina para acercarte al DXF':'Coordenadas guardadas','ok');
+};
+
+
+window.toggleUserMarker=function(){
+  S.showUserMarker=!S.showUserMarker;
+  const btn=document.getElementById('user-marker-btn');
+  if(btn)btn.innerHTML=S.showUserMarker
+    ? '<i class="ti ti-point"></i> Ocultar punto usuario'
+    : '<i class="ti ti-point-off"></i> Mostrar punto usuario';
+  if(userMarker){ S.showUserMarker?userMarker.show():userMarker.hide(); }
+  showToast(S.showUserMarker?'Punto de usuario visible':'Punto de usuario oculto','ok');
+};
+window.toggleAccuracyRing=function(){
+  S.showAccuracyRing=!S.showAccuracyRing;
+  const btn=document.getElementById('accuracy-ring-btn');
+  if(btn)btn.innerHTML=S.showAccuracyRing
+    ? '<i class="ti ti-circle-off"></i> Ocultar aro precisión GPS'
+    : '<i class="ti ti-circle"></i> Mostrar aro precisión GPS';
+  if(userMarker&&S.gpsPos){ userMarker.setAccuracyRadius(S.gpsPos.accuracy||1); }
+  showToast(S.showAccuracyRing?'Aro de precisión visible':'Aro de precisión oculto','ok');
 };
 
 window.startFieldWalk=function(){
