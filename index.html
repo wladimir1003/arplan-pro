@@ -1262,13 +1262,13 @@ function loadDXF(file){
     try{
       const text=e.target.result; S.lastDXFText=text; setProgress(40);
       const parsed=parseDXF(text); setProgress(70);
-      const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length;
-      console.log('[DXF] Parsed:',{total,layers:parsed.layers,segments:parsed.segments.length,circles:parsed.circles.length,arcs:parsed.arcs.length,segments3D:parsed.segments.filter(s=>(s.z1||0)!==0||(s.z2||0)!==0).length,units:parsed.units||'inline-parser'});
+      const total=parsed.segments.length+parsed.circles.length+parsed.arcs.length+(parsed.faces?.length||0);
+      console.log('[DXF] Parsed:',{total,layers:parsed.layers,segments:parsed.segments.length,circles:parsed.circles.length,arcs:parsed.arcs.length,faces:parsed.faces?.length||0,segments3D:parsed.segments.filter(s=>(s.z1||0)!==0||(s.z2||0)!==0).length,units:parsed.units||'inline-parser'});
       if(!total){showToast('DXF sin geometría visible','err');setProgress(0);return;}
 
       // 3D detection statistics
       const seg3D=parsed.segments.filter(s=>Math.abs(s.z1||0)>0.01||Math.abs(s.z2||0)>0.01).length;
-      const totalEnt=parsed.segments.length+parsed.circles.length+parsed.arcs.length+(parsed.texts?.length||0)+(parsed.points?.length||0);
+      const totalEnt=parsed.segments.length+parsed.circles.length+parsed.arcs.length+(parsed.faces?.length||0)+(parsed.texts?.length||0)+(parsed.points?.length||0);
       const has3D=seg3D>0;
       const pct3D=totalEnt>0?Math.round(seg3D/totalEnt*100):0;
 
@@ -1293,6 +1293,7 @@ function loadDXF(file){
         arcs: parsed.arcs.length,
         texts: parsed.texts?.length||0,
         points: parsed.points?.length||0,
+        faces: parsed.faces?.length||0,
         porciento3D: pct3D+'%'
       });
 
@@ -1319,6 +1320,26 @@ function buildDXFModel(parsed){
   const geoTargets=[];
   const addTarget=(e,n,label,type)=>{if(isFinite(e)&&isFinite(n))geoTargets.push({e,n,label,type});};
   const toV=(x,y,z=0)=> new THREE.Vector3(x-coordOrigin.e, z||0, -(y-coordOrigin.n));
+  // Render 3DFACE entities as translucent surfaces, not only wireframe.
+  const faceMatCache={};
+  const faceMat=layer=>{
+    if(!faceMatCache[layer])faceMatCache[layer]=new THREE.MeshBasicMaterial({color:LM[layer]||'#3b82f6',transparent:true,opacity:0.28,side:THREE.DoubleSide,depthWrite:false});
+    return faceMatCache[layer];
+  };
+  (parsed.faces||[]).forEach((f,idx)=>{
+    if(!f.pts||f.pts.length<3)return;
+    f.pts.forEach(p=>addTarget(p[0],p[1],`FACE ${idx+1}`,f.layer||'3DFACE'));
+    const verts=f.pts.map(p=>toV(p[0],p[1],p[2]||0));
+    const arr=[];
+    const pushTri=(a,b,c)=>{arr.push(a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z);};
+    pushTri(verts[0],verts[1],verts[2]);
+    if(verts.length>3)pushTri(verts[0],verts[2],verts[3]);
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
+    geo.computeVertexNormals();
+    const mesh=new THREE.Mesh(geo,faceMat(f.layer));
+    mesh.userData.layer=f.layer; group.add(mesh); added++;
+  });
   parsed.segments.forEach((s,idx)=>{
     addTarget(s.x1,s.y1,`LINE ${idx+1} A`,s.layer||'LINE'); addTarget(s.x2,s.y2,`LINE ${idx+1} B`,s.layer||'LINE');
     // DXF/UTM: X=Este, Y=Norte, Z=Altura. Three.js: X=Este, Y=Altura, Z=-Norte.
@@ -1434,7 +1455,7 @@ function parseDXF(text){
   const P=[];
   for(let i=0;i+1<raw.length;i+=2){const c=parseInt(raw[i].trim(),10),v=raw[i+1].trim();if(!isNaN(c))P.push([c,v]);}
   const unitFactor=readINSUNITS(P); // scale factor to meters
-  const res={segments:[],circles:[],arcs:[],texts:[],points:[],layers:[],unitFactor};
+  const res={segments:[],circles:[],arcs:[],texts:[],points:[],faces:[],layers:[],unitFactor};
   const lset=new Set();
   const stats={ent2d:0,ent3d:0,blocks:0,inserts:0,discarded:0,warnings:[]};
   // Read BLOCKS
@@ -1482,7 +1503,7 @@ function readEnt(P,i,res,lset,blocks){
       res.segments.push({x1,y1,z1,x2,y2,z2,layer});lset.add(layer);}
     return i;
   }
-  if(type==='LWPOLYLINE'||type==='POLYLINE'||type==='SPLINE'){
+  if(type==='LWPOLYLINE'||type==='SPLINE'){
     i++;const pts=[];let layer='0',closed=false,lx=null,ly=null,lz=0,elev=0;
     while(i<P.length&&P[i][0]!==0){
       const[c,v]=P[i];
@@ -1491,17 +1512,44 @@ function readEnt(P,i,res,lset,blocks){
       if(c===20){ly=+v;if(lx!==null&&isFinite(lx)&&isFinite(ly)){pts.push([lx,ly,isFinite(lz)&&lz?lz:elev]);lx=null;lz=0;}}
       i++;
     }
-    if(type==='POLYLINE'){
-      while(i<P.length&&P[i][0]===0&&P[i][1]==='VERTEX'){
-        i++;let vx=null,vy=null,vz=0;
-        while(i<P.length&&P[i][0]!==0){if(P[i][0]===10)vx=+P[i][1];if(P[i][0]===20)vy=+P[i][1];if(P[i][0]===30)vz=+P[i][1];i++;}
-        if(vx!==null&&vy!==null&&isFinite(vx)&&isFinite(vy))pts.push([vx,vy,vz]);
-      }
-      if(i<P.length&&P[i][0]===0&&P[i][1]==='SEQEND'){i++;while(i<P.length&&P[i][0]!==0)i++;}
-    }
     if(closed&&pts.length)pts.push(pts[0]);
-    for(let j=0;j<pts.length-1;j++)
-      res.segments.push({x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
+    for(let j=0;j<pts.length-1;j++){
+      if(Math.hypot(pts[j+1][0]-pts[j][0],pts[j+1][1]-pts[j][1],(pts[j+1][2]||0)-(pts[j][2]||0))>1e-10)
+        res.segments.push({x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
+    }
+    if(pts.length)lset.add(layer);
+    return i;
+  }
+  if(type==='POLYLINE'){
+    i++;const pts=[];let layer='0',closed=false,flags=0;
+    // IMPORTANT: classic POLYLINE usually contains header 10/20/30 = 0,0,0 before VERTEX.
+    // Do NOT treat that header point as geometry, otherwise a false line from 0,0 to UTM appears.
+    while(i<P.length&&P[i][0]!==0){
+      const[c,v]=P[i];
+      if(c===8)layer=v;
+      if(c===70){flags=parseInt(v)||0;if(flags&1)closed=true;}
+      i++;
+    }
+    while(i<P.length&&P[i][0]===0&&P[i][1]==='VERTEX'){
+      i++;let vx=null,vy=null,vz=0,vLayer=layer;
+      while(i<P.length&&P[i][0]!==0){
+        if(P[i][0]===8)vLayer=P[i][1];
+        if(P[i][0]===10)vx=+P[i][1];
+        if(P[i][0]===20)vy=+P[i][1];
+        if(P[i][0]===30)vz=+P[i][1];
+        i++;
+      }
+      if(vx!==null&&vy!==null&&isFinite(vx)&&isFinite(vy)){
+        pts.push([vx,vy,isFinite(vz)?vz:0]);
+        layer=vLayer||layer;
+      }
+    }
+    if(i<P.length&&P[i][0]===0&&P[i][1]==='SEQEND'){i++;while(i<P.length&&P[i][0]!==0)i++;}
+    if(closed&&pts.length)pts.push(pts[0]);
+    for(let j=0;j<pts.length-1;j++){
+      if(Math.hypot(pts[j+1][0]-pts[j][0],pts[j+1][1]-pts[j][1],(pts[j+1][2]||0)-(pts[j][2]||0))>1e-10)
+        res.segments.push({x1:pts[j][0],y1:pts[j][1],z1:pts[j][2]||0,x2:pts[j+1][0],y2:pts[j+1][1],z2:pts[j+1][2]||0,layer});
+    }
     if(pts.length)lset.add(layer);
     return i;
   }
@@ -1524,6 +1572,9 @@ function readEnt(P,i,res,lset,blocks){
       if(c>=10&&c<=13)vs[c-10][0]=+v;if(c>=20&&c<=23)vs[c-20][1]=+v;if(c>=30&&c<=33)vs[c-30][2]=+v;
       i++;
     }
+    // Save as a real face for 3D terrain/building roofs, and also add its edges.
+    const unique=vs.filter((p,idx,arr)=>idx===0||Math.hypot(p[0]-arr[idx-1][0],p[1]-arr[idx-1][1],p[2]-arr[idx-1][2])>1e-10);
+    if(unique.length>=3)res.faces.push({pts:unique,layer});
     [[0,1],[1,2],[2,3],[3,0]].forEach(([a,b])=>{
       const[x1,y1,z1]=vs[a],[x2,y2,z2]=vs[b];
       if(Math.hypot(x2-x1,y2-y1,z2-z1)>1e-10)res.segments.push({x1,y1,z1,x2,y2,z2,layer});
